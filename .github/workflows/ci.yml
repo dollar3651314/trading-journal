@@ -1,0 +1,35 @@
+# 每个 PR 的自动检查（agents 规则 C54），按 agents/模板/ci.yml 建立。
+# 分支保护：把这里的检查设为 staging 和 main 的"必须通过"，并勾选 Do not allow bypassing the above settings。本仓库是公开仓库，可以开启。
+# 原则：不需要任何密钥（外部服务用替身）；用到数据库的，用 GitHub 提供的 Postgres 容器在真实数据库上跑（C37）。
+# 现在还没有代码，只跑项目地图和索引检查。第 1 步建立代码时，在这里加上：npm ci、单元测试（打开下面的 Postgres）、中英文键名检查、构建；
+# 以及部署 job（needs 前面的检查，只在推送到 staging / main 时运行，见 平台规范/Cloudflare.md K3）。
+name: ci
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 用到 Postgres 时打开：
+    # services:
+    #   postgres:
+    #     image: postgres:16
+    #     env: { POSTGRES_PASSWORD: ci }
+    #     ports: ['5432:5432']
+    #     options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: 项目地图和索引检查（C53）
+        run: node scripts/check-project-index.mjs
