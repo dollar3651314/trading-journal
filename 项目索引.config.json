@@ -1,0 +1,30 @@
+{
+  "_说明": "项目地图和项目索引的检查配置（agents 规则 C53）。由 scripts/check-project-index.mjs 读取，CI 每次 PR 都运行。代码还没有时，名单的来源目录是空的，检查自然通过；第 1 步建立代码后按实际目录补充。",
+  "map": "项目地图.md",
+  "index": "项目索引.md",
+  "entry": ["CLAUDE.md", "AGENTS.md"],
+  "files": {
+    "include": ["src/**", "test/**", "e2e/**", "scripts/**", "db/**", "messages/**", "workers/**", "deploy/**", ".github/workflows/**", "package.json", "wrangler.jsonc", "项目索引.config.json", "*.md", "需求文档/**", "市场/**", "技术方案/**", "测试报告/**", "部署方案/**", "交付记录/**"],
+    "exclude": ["**/package-lock.json", "**/.gitignore", "assets/**"]
+  },
+  "lists": [
+    {
+      "name": "环境变量和密钥",
+      "section": "5. 环境变量",
+      "sources": ["src/", "scripts/", ".github/workflows/", "wrangler.jsonc"],
+      "patterns": ["\\benv\\.([A-Z][A-Z0-9_]+)", "\\$\\{\\{\\s*(?:vars|secrets)\\.([A-Z][A-Z0-9_]+)"],
+      "ignore": ["GITHUB_TOKEN"],
+      "match": "firstColumn",
+      "twoWay": "word",
+      "token": "^[A-Z][A-Z0-9_]+$"
+    },
+    {
+      "name": "数据库表",
+      "section": "4.1",
+      "sources": ["db/migrations/"],
+      "patterns": ["create table (?:if not exists )?(\\w+)"],
+      "match": "firstColumn",
+      "twoWay": "extracted"
+    }
+  ]
+}
