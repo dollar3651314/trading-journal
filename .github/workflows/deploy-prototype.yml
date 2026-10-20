@@ -1,0 +1,29 @@
+# 部署高保真原型（agents 协作总则第 4.5 步）。只能手动触发；先跑完整的 CI，全绿后才部署（平台规范/Cloudflare.md K3）。
+# 部署到独立的 Worker trading-journal-prototype（wrangler.jsonc 的 env.prototype），只有模拟数据，不绑定任何真实资源。
+# 需要的 GitHub Secrets（只由 Amos 填写，不经过 AI）：CLOUDFLARE_API_TOKEN（"Edit Cloudflare Workers" 模板，只授权到目标账户）、CLOUDFLARE_ACCOUNT_ID。
+# workers.dev 地址要用 Cloudflare Access 保护，只允许 Amos 登录访问（K5）。
+name: deploy-prototype
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: 部署原型 Worker
+        run: npx wrangler deploy --env prototype --var APP_VERSION:${GITHUB_SHA::7}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

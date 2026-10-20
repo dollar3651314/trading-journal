@@ -1,0 +1,18 @@
+// Cloudflare Worker 配置（平台规范/Cloudflare.md）。绑定、变量、密钥在每个环境里单独写，不会继承（K5）。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trading-journal",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "observability": { "enabled": true },
+  "vars": { "APP_ENV": "production", "APP_VERSION": "dev" },
+  "env": {
+    // 原型：独立的 Worker，只放模拟数据，不绑定任何真实资源；workers.dev 地址用 Cloudflare Access 保护（K5）
+    "prototype": {
+      "name": "trading-journal-prototype",
+      "vars": { "APP_ENV": "prototype", "APP_VERSION": "dev" }
+    }
+  }
+}

@@ -4,7 +4,7 @@
   "index": "项目索引.md",
   "entry": ["CLAUDE.md", "AGENTS.md"],
   "files": {
-    "include": ["src/**", "test/**", "e2e/**", "scripts/**", "db/**", "messages/**", "workers/**", "deploy/**", ".github/workflows/**", "package.json", "wrangler.jsonc", "项目索引.config.json", "*.md", "需求文档/**", "市场/**", "技术方案/**", "测试报告/**", "部署方案/**", "交付记录/**"],
+    "include": ["src/**", "test/**", "e2e/**", "scripts/**", "db/**", "messages/**", "workers/**", "deploy/**", ".github/workflows/**", "package.json", "wrangler.jsonc", "tsconfig.json", "vite.config.ts", "vitest.config.ts", "项目索引.config.json", "*.md", "需求文档/**", "市场/**", "技术方案/**", "测试报告/**", "部署方案/**", "交付记录/**"],
     "exclude": ["**/package-lock.json", "**/.gitignore", "assets/**"]
   },
   "lists": [
