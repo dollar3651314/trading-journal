@@ -1,0 +1,111 @@
+/* 风格方向 1：C 的结构 + 深色（A 配色）/ 浅色（B 配色，绿色加深到 #047857 以满足 WCAG AA）。 */
+:root, [data-theme='light'] {
+  --bg: #F6F7FB; --card: #FFFFFF; --line: #E4E7EF; --fg: #141730; --mut: #5E6478;
+  --acc: #5B3DF5; --accbtn: #5B3DF5; --accfg: #FFFFFF; --up: #047857; --dn: #D92D20; --warn: #B45309; --bar: #ECEEF5; --chip: #F1F2F7;
+  --shadow: 0 1px 2px rgba(20, 23, 48, .04);
+}
+[data-theme='dark'] {
+  --bg: #0B0F17; --card: #131A26; --line: #223047; --fg: #E6EDF7; --mut: #8A9BB5;
+  --acc: #2F81F7; --accbtn: #1F6FEB; --accfg: #FFFFFF; --up: #2EBD85; --dn: #F6465D; --warn: #E3A008; --bar: #223047; --chip: #1C2636;
+  --shadow: none;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "WenQuanYi Zen Hei", sans-serif; font-size: 14px; line-height: 1.45; }
+a { color: var(--acc); text-decoration: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+.banner { background: #E3A008; color: #1A1300; text-align: center; font-size: 12px; padding: 4px 8px; font-weight: 600; }
+/* 预留滚动条的位置：页面长短不同时（有的有滚动条、有的没有），内容不会左右跳 */
+html { scrollbar-gutter: stable; }
+.page { max-width: 1280px; margin: 0 auto; padding: 20px; }
+.m .page { padding: 16px; padding-bottom: 88px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+.m .card { padding: 16px; border-radius: 16px; }
+.stack > * + * { margin-top: 16px; }
+.grid { display: grid; gap: 20px; }
+.m .grid { gap: 12px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.wrap { flex-wrap: wrap; }
+.mut { color: var(--mut); font-size: 12.5px; }
+.note { color: var(--mut); font-size: 12px; }
+.h { font-weight: 700; font-size: 15px; margin-bottom: 10px; }
+.title { font-weight: 700; font-size: 22px; }
+.kv { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.big { font-size: 44px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.m .big { font-size: 40px; }
+.up { color: var(--up); } .dn { color: var(--dn); } .warn { color: var(--warn); }
+.num { font-variant-numeric: tabular-nums; }
+
+.top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; }
+.logo { font-weight: 700; font-size: 17px; color: var(--fg); margin-right: 24px; }
+.nav a { color: var(--mut); margin-right: 18px; padding-bottom: 5px; }
+.nav a.on { color: var(--fg); font-weight: 700; border-bottom: 2px solid var(--acc); }
+.pill, select.pill { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; background: var(--card); font-size: 13px; cursor: pointer; color: var(--fg); }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; border-top: 1px solid var(--line); background: var(--card); z-index: 10; }
+.tabbar a { flex: 1; text-align: center; padding: 10px 0 14px; font-size: 12px; color: var(--mut); }
+.tabbar a.on { color: var(--acc); font-weight: 700; }
+
+.prog { height: 10px; background: var(--bar); border-radius: 5px; margin: 6px 0 12px; overflow: hidden; }
+.prog i { display: block; height: 100%; border-radius: 5px; background: var(--up); }
+.prog i.hot { background: var(--warn); } .prog i.over { background: var(--dn); } .prog i.acc { background: var(--acc); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { color: var(--mut); font-weight: 400; text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.r { text-align: right; font-variant-numeric: tabular-nums; }
+tr.click { cursor: pointer; } tr.click:hover td, tr.sel td { background: var(--chip); }
+
+.tag { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 12px; background: var(--chip); border: 1px solid var(--line); margin: 0 4px 4px 0; cursor: pointer; color: var(--fg); }
+.tag.on { background: var(--accbtn); color: var(--accfg); border-color: var(--acc); }
+.btn { display: inline-block; background: var(--accbtn); color: var(--accfg); border: 0; border-radius: 10px; padding: 9px 16px; font-size: 13.5px; font-weight: 700; cursor: pointer; text-align: center; }
+.btn.block { display: block; width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn2 { display: inline-block; border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; font-size: 13px; background: var(--card); cursor: pointer; color: var(--fg); }
+/* 按钮上的白字要满足 4.5:1：深色主题的主按钮用更深的蓝 #1F6FEB（4.63），删除按钮用 #B42318（6.57） */
+.btn-danger { background: #B42318; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: none; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; color: var(--mut); cursor: pointer; }
+.seg button.on { background: var(--card); color: var(--fg); font-weight: 700; }
+
+label.lbl { display: block; font-size: 12.5px; color: var(--mut); margin-bottom: 4px; }
+.field, input.field, select.field, textarea.field { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--bg); margin-bottom: 12px; font-variant-numeric: tabular-nums; color: var(--fg); }
+.field.row { display: flex; align-items: center; gap: 8px; }
+.err { color: var(--dn); font-size: 12.5px; margin: -8px 0 10px; }
+.drop { border: 2px dashed var(--line); border-radius: 14px; padding: 32px 16px; text-align: center; margin-bottom: 12px; }
+.drop.over { border-color: var(--acc); }
+.state { text-align: center; padding: 36px 16px; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; margin-right: 6px; }
+.toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13px; z-index: 30; }
+.sheet-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 20; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 20px 20px 0 0; padding: 16px; z-index: 21; max-height: 85vh; overflow: auto; }
+.sheet .grab { width: 40px; height: 4px; background: var(--line); border-radius: 2px; margin: 0 auto 12px; }
+.tg { background: #FFFFFF; color: #111111; border-radius: 14px; padding: 12px; font-size: 13px; line-height: 1.55; border: 1px solid #DDDDDD; }
+.tg .k { display: inline-block; border: 1px solid #1A7BB8; color: #1A7BB8; border-radius: 8px; padding: 4px 10px; margin: 6px 6px 0 0; font-size: 12px; }
+.tg .f { color: #555555; font-size: 12px; }
+.listrow { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
+.skeleton { height: 14px; border-radius: 6px; background: var(--bar); margin: 8px 0; }
+.hero { text-align: center; padding: 40px 0 24px; }
+.hero .title { font-size: 36px; line-height: 1.25; }
+.m .hero .title { font-size: 26px; }
+
+/* 平板和窄电脑（768–1100）：电脑版的多栏布局改为单栏或两栏，不出现横向滚动 */
+@media (max-width: 1100px) {
+  .adapt { grid-template-columns: 1fr !important; }
+  .adapt2 { grid-template-columns: repeat(2, 1fr) !important; }
+  .top { flex-wrap: wrap; }
+}
+.scroll-x { overflow-x: auto; }
+
+/* v1.2：行为标记、通知订阅、邮件预览 */
+.tag.flag { background: transparent; border-color: var(--warn); color: var(--warn); }
+.rules3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.rules3 a { display: block; color: var(--fg); }
+.flagfact { font-size: 12.5px; margin-bottom: 6px; line-height: 1.6; }
+.check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--acc); }
+.previewbox { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 8px 0; }
+.tg.mail div { margin-bottom: 2px; }
+.tg.mail hr { border: 0; border-top: 1px solid #DDDDDD; margin: 8px 0; }
+.tg.mail a { color: #1A7BB8; }
