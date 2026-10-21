@@ -17,6 +17,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 
 .banner { background: #E3A008; color: #1A1300; text-align: center; font-size: 12px; padding: 4px 8px; font-weight: 600; }
+/* 预留滚动条的位置：页面长短不同时（有的有滚动条、有的没有），内容不会左右跳 */
+html { scrollbar-gutter: stable; }
 .page { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .m .page { padding: 16px; padding-bottom: 88px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }

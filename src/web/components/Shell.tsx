@@ -60,7 +60,8 @@ export function Shell({ children, wide = true }: { children: ReactNode; wide?: b
   return (
     <div>
       <Banner />
-      <div className="page" style={wide ? undefined : { maxWidth: 1000 }}>
+      {/* 顶部导航始终是同一个宽度；wide=false 只收窄内容，左边和导航对齐，切换菜单时导航不跳动 */}
+      <div className="page">
         <div className="top">
           <div className="row" style={{ justifyContent: 'flex-start' }}>
             <Link to="/app" className="logo">{t('app.name')}</Link>
@@ -68,7 +69,7 @@ export function Shell({ children, wide = true }: { children: ReactNode; wide?: b
           </div>
           <div className="row" style={{ gap: 8 }}><AccountPicker /><Prefs /><Link to="/admin" className="pill">{t('nav.admin')}</Link></div>
         </div>
-        {children}
+        {wide ? children : <div style={{ maxWidth: 960 }}>{children}</div>}
         <div className="note" style={{ textAlign: 'center', marginTop: 20 }}>{t('common.disclaimer')}</div>
       </div>
     </div>
