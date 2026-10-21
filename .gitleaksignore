@@ -1,0 +1,4 @@
+# 密钥扫描（gitleaks）的已确认误报。每条只排除一个提交里的一行，新的提交不受影响。
+# 加一条之前要人工确认不是真密钥，并在下面写明原因。
+# src/web/pages/Import.tsx 的 TOKEN_CHARS：原型生成演示令牌用的字符表（公开的字母和数字），不是密钥。
+153a086cc4775c59b127f0d8a4057237c50cf4a3:src/web/pages/Import.tsx:generic-api-key:14
