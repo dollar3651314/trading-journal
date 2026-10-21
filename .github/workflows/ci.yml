@@ -1,7 +1,13 @@
-# 每个 PR 的自动检查（agents 规则 C54），按 agents/模板/ci.yml 建立。
-# 分支保护：把这里的 unit 检查设为 staging 和 main 的"必须通过"，并勾选 Do not allow bypassing the above settings。本仓库是公开仓库，可以开启。
-# 原则：不需要任何密钥（外部服务用替身）；用到数据库后，打开下面的 Postgres，在真实数据库上跑（C37）。
-# 部署 job（推送到 staging / main、CI 全绿后 wrangler deploy）在建立测试环境那一步加上（平台规范/Cloudflare.md K3）。
+# 每个 PR 的自动检查（agents 规则 C54），按 agents/模板/ci.yml 的"精简 CI"写（C74，agents main 72ebf0f）。
+# 精简 CI：
+#   - 按改动路径决定跑哪些检查：只改文档（*.md、assets/）只跑基本检查；改了代码、文案、配置才跑 app。
+#   - 没跑的 job 显示"跳过"，由最后的汇总 job ci-ok 统一给出结果，PR 不会一直"等待中"。
+#     不要在下面的 on: 里加 paths: 过滤：没触发的检查会一直"等待中"，PR 合并不了。
+#   - 推送到 staging、main，手动运行，以及被 deploy-prototype 调用时，跑完整检查（不按路径跳过）。
+#   - 同一分支连续推送时取消旧的运行；缓存 npm；每个 job 都有 timeout-minutes。没有定时任务。
+# 分支保护：staging 和 main 只把 ci-ok 设为"必须通过"（不要把会跳过的 app 设为必须通过），并勾选 Do not allow bypassing the above settings。
+# 原则：不需要任何密钥（外部服务用替身）；用到数据库后，在 app 里打开 Postgres，在真实数据库上跑（C37）。
+# 部署 job（推送到 staging、CI 全绿后 wrangler deploy）在建立测试环境那一步加上（平台规范/Cloudflare.md K3）。
 name: ci
 on:
   pull_request:
@@ -12,11 +18,61 @@ on:
   workflow_call:
 permissions:
   contents: read
+  pull-requests: read   # 路径过滤要读 PR 改了哪些文件；密钥扫描要读 PR 的提交列表。只读
 concurrency:
-  group: ci-${{ github.ref }}-${{ github.workflow }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 jobs:
-  unit:
+  # 判断这次改了哪些部分。只有 PR 按路径判断；其他情况 full=true，下面全部跑。
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ci == 'true' }}
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ci:
+              - '.github/workflows/**'
+            app:
+              - 'src/**'
+              - 'test/**'
+              - 'messages/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - 'vite.config.ts'
+              - 'vitest.config.ts'
+              - 'wrangler.jsonc'
+
+  # 基本检查：每次都跑，只改文档时也只跑这一项。
+  basic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: 项目地图和索引检查（C53）
+        run: node scripts/check-project-index.mjs
+      - name: 密钥扫描（仓库里不能出现密钥的值）
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 前端和 Worker 的快检查：改了代码、文案、配置时才跑。
+  app:
+    needs: changes
+    if: needs.changes.outputs.full == 'true' || needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # 用到 Postgres 时打开：
@@ -32,8 +88,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: 项目地图和索引检查（C53）
-        run: node scripts/check-project-index.mjs
       - run: npm ci
       - name: 中英文文案键名检查
         run: npm run check:messages
@@ -45,3 +99,17 @@ jobs:
         run: npm run build
       - name: Worker 打包检查（不部署，不需要密钥）
         run: npm run deploy:dry -- --env prototype
+
+  # 汇总：分支保护只把这一项设为"必须通过"。跳过的 job 算通过；任何一项失败或被取消，这里就失败。
+  ci-ok:
+    needs: [changes, basic, app]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: 汇总结果
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "有检查失败或被取消"; exit 1
+          fi

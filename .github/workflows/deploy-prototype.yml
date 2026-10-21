@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  pull-requests: read   # 调用的 ci.yml 声明了这个权限，调用方要给到（只读）
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
