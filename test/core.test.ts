@@ -103,3 +103,7 @@ describe('考核红线（AC-R2，按 FTMO 官网原文手算）', () => {
     expect(r.remaining).toBe(250_000);
   });
 });
+
+// 临时：验证 ci-ok 在测试失败时也失败（第 1 步验证用，这个分支不合并）
+import { it as itFail, expect as expectFail } from 'vitest';
+itFail('故意失败', () => expectFail(1).toBe(2));
