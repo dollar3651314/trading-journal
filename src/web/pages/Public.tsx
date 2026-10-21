@@ -1,10 +1,12 @@
-// 公开页面：落地页、免费计算器（不用注册）、登录。计算器用的是 src/core 的真实规则，结果和考核页一致（AC-G4）。
+// 公开页面：落地页、免费计算器（不用注册）、登录、退订（邮件里的链接，不用登录，AC-N6）。计算器用的是 src/core 的真实规则，结果和考核页一致（AC-G4）。
 import { useEffect, useState } from 'react';
 import { parseMoney } from '../../core/money';
 import { PENDING_TEMPLATES, TEMPLATES, computeRedLines } from '../../core/rules';
+import { KINDS } from '../components/Alerts';
 import { money } from '../components/ui';
 import { Banner, Prefs } from '../components/Shell';
 import { Link, navigate, useIsMobile, useT } from '../lib';
+import { accountList } from '../mock/api';
 
 const CHANNELS = ['reddit', 'calculator', 'cn-group', 'forexfactory', 'other'];
 
@@ -152,6 +154,36 @@ export function Login() {
             <button className="btn block" disabled={code.length !== 6} onClick={() => navigate('/app')}>{t('login.submit')}</button>
           </>}
           <div className="mut" style={{ marginTop: 14 }}>{t('login.noInvite')} <Link to="/#apply">{t('login.apply')}</Link></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 退订：从推送邮件的链接打开，不用登录。链接里带签名（正式版由 Worker 校验）。
+ * 打开页面不会直接退订，要点一下确认：邮箱的安全扫描会预先打开链接，直接退订会误退（邮件同时带 List-Unsubscribe 一键退订头）。
+ */
+export function Unsubscribe() {
+  const t = useT();
+  const q = new URLSearchParams(location.search);
+  const kind = KINDS.find((k) => k === q.get('kind'));
+  const account = accountList().find((a) => a.id === q.get('account'));
+  const [done, setDone] = useState(false);
+  if (!kind) return <div><Banner /><div className="page" style={{ maxWidth: 480 }}><PublicTop /><div className="card"><div className="h">{t('unsub.title')}</div><div className="mut">{t('unsub.invalid')}</div></div></div></div>;
+  const what = t('unsub.what', { kind: t(`notify.kind.${kind}`), account: account?.name ?? t('unsub.allAccounts') });
+  return (
+    <div>
+      <Banner />
+      <div className="page" style={{ maxWidth: 480 }}>
+        <PublicTop />
+        <div className="card">
+          <div className="h">{t(done ? 'unsub.doneTitle' : 'unsub.title')}</div>
+          <div style={{ marginBottom: 14 }}>{done ? t('unsub.done', { what }) : t('unsub.confirm', { what })}</div>
+          {done
+            ? <button className="btn2" onClick={() => setDone(false)}>{t('unsub.undo')}</button>
+            : <button className="btn block" onClick={() => setDone(true)}>{t('unsub.button')}</button>}
+          <div className="mut" style={{ marginTop: 14 }}>{t('unsub.other')} <Link to="/app/settings">{t('unsub.manage')}</Link></div>
         </div>
       </div>
     </div>

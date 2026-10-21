@@ -131,7 +131,10 @@ export function RedLineCard({ acc, today, full, footer }: { acc: Account; today:
         <div className="row"><span>{t('red.target', { pct: pct(r.profitPct, 2), limit: pct(tpl.profitTargetPct, 0) })}</span><span className="mut">{t('red.toTarget', { amount: money(r.profitToTarget ?? 0) })}</span></div>
         <div className="prog"><i className="acc" style={{ width: `${Math.min(1, Math.max(0, r.profitPct / tpl.profitTargetPct)) * 100}%` }} /></div>
       </>}
-      <div className="note">{t('red.asOf', { date: today, floating: acc.floating ? t('red.withFloating') : t('common.noFloating') })}</div>
+      {/* 装了 EA 且今天推送过：按 EA 推送的净值估算；否则按最近一次对账单（需求说明书 v1.2 CH1） */}
+      <div className="note">{acc.ea.status === 'connected' && acc.ea.lastPush?.slice(0, 10) === today
+        ? t('red.asOfEa', { time: acc.ea.lastPush.slice(11, 16) })
+        : t('red.asOf', { date: today, floating: acc.floating ? t('red.withFloating') : t('common.noFloating') })}</div>
       {footer}
     </div>
   );

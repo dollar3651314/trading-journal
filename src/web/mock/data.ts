@@ -14,6 +14,7 @@ export interface Account {
   floating: number; // 最近一次报表的持仓浮动盈亏
   lastImport: string | null;
   trades: Trade[];
+  ea: { status: 'connected' | 'disconnected' | 'never'; lastPush: string | null; version: string | null; pushesToday: number; equity: number | null };
 }
 
 function rng(seed: number) {
@@ -73,20 +74,37 @@ function makeTrades(seed: number, n: number, endDay: string, suffix = ''): Trade
 
 export const TODAY = '2026-10-19';
 
+/** 让行为规则在原型里有东西可看：一组报复性交易（和效果图的提醒预览一致）、一个交易笔数特别多的日子。 */
+function behaviorScenes(): Trade[] {
+  const t = (id: string, open: string, close: string, gross: number, lots: number, symbol = 'XAUUSD'): Trade => ({
+    ticket: id, symbol, side: 'buy', lots, openTime: open, closeTime: close, openPrice: '2650.00', closePrice: '2650.00',
+    grossProfit: gross, commission: -Math.round(lots * 700), swap: 0, taxes: 0, tags: [],
+  });
+  const busy = Array.from({ length: 11 }, (_, i) => t(`84930${String(i).padStart(2, '0')}`, `2026-10-15T${String(8 + i).padStart(2, '0')}:05:00Z`, `2026-10-15T${String(8 + i).padStart(2, '0')}:35:00Z`, [3200, -4100, 1500, -2600, -1800, 2200, -3900, 900, -2500, -1400, 1100][i]!, 0.2, i % 3 ? 'EURUSD' : 'XAUUSD'));
+  return [
+    t('84939001', '2026-10-19T13:20:00Z', '2026-10-19T14:05:00Z', -14200, 0.2),
+    t('84939002', '2026-10-19T14:11:00Z', '2026-10-19T14:28:00Z', -9600, 0.4),
+    ...busy,
+  ];
+}
+
 export const ACCOUNTS: Account[] = [
   {
     id: 'ftmo-100k', name: 'FTMO 100K', platform: 'MT5', accountNo: '5100231', currency: 'USD', serverTz: 'GMT+2/+3',
     templateId: 'ftmo-2step', initialCapital: 10_000_000, floating: -110_000, lastImport: '2026-10-19T21:05:00Z',
-    trades: makeTrades(7, 62, TODAY),
+    trades: [...makeTrades(7, 62, TODAY), ...behaviorScenes()],
+    ea: { status: 'connected', lastPush: '2026-10-19T14:32:00Z', version: '1.0', pushesToday: 873, equity: null },
   },
   {
     id: 'mt4-personal', name: 'IC Live', platform: 'MT4', accountNo: '880112', currency: 'USD', serverTz: 'GMT+2/+3',
     templateId: null, initialCapital: 500_000, floating: 0, lastImport: '2026-10-18T22:40:00Z',
     trades: makeTrades(11, 23, '2026-10-17', '.m'),
+    ea: { status: 'disconnected', lastPush: '2026-10-17T19:40:00Z', version: '1.0', pushesToday: 0, equity: null },
   },
   {
     id: 'new-empty', name: 'New (empty)', platform: 'MT5', accountNo: '—', currency: 'USD', serverTz: 'GMT+2/+3',
     templateId: null, initialCapital: 0, floating: 0, lastImport: null, trades: [],
+    ea: { status: 'never', lastPush: null, version: null, pushesToday: 0, equity: null },
   },
 ];
 
@@ -120,3 +138,15 @@ export const CHANNEL_STATS = [
 ];
 
 export const INBOUND_ADDRESS = 'in+7f3k9q2xpa@tradingjournal.example';
+
+export const LOGIN_EMAIL = 'trader@example.com';
+export const TG_HANDLE = '@trader_demo';
+
+// 通知订阅的默认值（AC-N1）：每日战报和接近红线发 Telegram（已绑定时），其余关闭。
+export const SUBSCRIPTIONS = [
+  { kind: 'daily', tg: true, mail: false },
+  { kind: 'weekly', tg: false, mail: false },
+  { kind: 'redline', tg: true, mail: false },
+  { kind: 'behavior', tg: false, mail: false },
+  { kind: 'eaDown', tg: false, mail: false },
+] as const;

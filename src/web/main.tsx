@@ -9,7 +9,7 @@ import { Import } from './pages/Import';
 import { Prop } from './pages/Prop';
 import { Settings } from './pages/Settings';
 import { Admin } from './pages/Admin';
-import { Calculator, Landing, Login } from './pages/Public';
+import { Calculator, Landing, Login, Unsubscribe } from './pages/Public';
 
 function Router() {
   const path = useLocation().split('?')[0]?.replace(/\/$/, '') || '/';
@@ -17,6 +17,7 @@ function Router() {
     case '/': return <Landing />;
     case '/calculator': return <Calculator />;
     case '/login': return <Login />;
+    case '/unsubscribe': return <Unsubscribe />;
     case '/app': return <Dashboard />;
     case '/app/stats': return <Dashboard stats />;
     case '/app/trades': return <Trades />;

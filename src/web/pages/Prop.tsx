@@ -1,29 +1,12 @@
-// 考核：今日红线（估算）、规则模板、Telegram 战报预览。战报里不出现任何品种和方向的建议（AC-R6）。
+// 考核：今日红线（估算）、规则模板、Telegram 战报预览（预览组件在 components/Alerts.tsx，其他推送的订阅在设置页）。战报里不出现任何品种和方向的建议（AC-R6）。
 import { useState } from 'react';
-import { computeMetrics, netPnl } from '../../core/metrics';
 import { PENDING_TEMPLATES, TEMPLATES } from '../../core/rules';
-import { LoadError, Loading, RedLineCard, accountRuleState, money, pct, useLoad } from '../components/ui';
+import { TgPreview } from '../components/Alerts';
+import { LoadError, Loading, RedLineCard, money, useLoad } from '../components/ui';
 import { Shell, useAccountId } from '../components/Shell';
 import { useIsMobile, useT } from '../lib';
 import { fetchAccount } from '../mock/api';
-import { TODAY, type Account } from '../mock/data';
-
-function Report({ acc }: { acc: Account }) {
-  const t = useT();
-  const today = acc.trades.filter((x) => x.closeTime.slice(0, 10) === TODAY);
-  const m = computeMetrics(today);
-  const s = accountRuleState(acc, TODAY);
-  if (today.length === 0) return <div className="tg">{t('report.title', { date: TODAY, account: acc.name })}<br />{t('report.none')}</div>;
-  return (
-    <div className="tg">
-      <b>{t('report.title', { date: TODAY, account: acc.name })}</b><br />
-      {t('report.net', { net: money(today.reduce((a, x) => a + netPnl(x), 0), true), n: m.count, w: m.wins, l: m.losses })}<br />
-      {s && <>{t('report.remaining', { amount: money(s.result.remaining), pct: pct(s.result.dailyUsage, 0) })}<br />{t('report.max', { amount: money(Math.max(0, s.equity - s.result.maxLine)) })}<br /></>}
-      <span className="f">{t('report.foot')}</span><br />
-      <span className="k">{t('report.open')}</span><span className="k">{t('report.tag')}</span>
-    </div>
-  );
-}
+import { TODAY } from '../mock/data';
 
 export function Prop() {
   const t = useT();
@@ -73,7 +56,7 @@ export function Prop() {
         </div>
       )}
       <div className="mut" style={{ marginBottom: 6 }}>{t('prop.preview')}</div>
-      <Report acc={view} />
+      <TgPreview kind="daily" acc={view} />
       <button className="btn2" style={{ marginTop: 10 }} onClick={() => { setBound(!bound); setCode(null); }}>{t('proto.toggleBind')}</button>
     </div>
   );
