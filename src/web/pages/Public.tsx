@@ -7,6 +7,8 @@ import { money } from '../components/ui';
 import { Banner, Prefs } from '../components/Shell';
 import { Link, navigate, useIsMobile, useT } from '../lib';
 import { accountList } from '../mock/api';
+import { ADMIN_EMAIL, loginAdmin, loginUser } from '../mock/session';
+import { LOGIN_EMAIL } from '../mock/data';
 
 const CHANNELS = ['reddit', 'calculator', 'cn-group', 'forexfactory', 'other'];
 
@@ -66,6 +68,7 @@ export function Landing() {
           <Apply channel="other" />
         </div>
         <div className="note" style={{ textAlign: 'center', margin: '24px 0' }}>{t('landing.risk')}</div>
+        <div className="note" style={{ textAlign: 'center', marginBottom: 24 }}><Link to="/admin/login">{t('landing.protoAdmin')}</Link></div>
       </div>
     </div>
   );
@@ -132,8 +135,10 @@ export function Calculator() {
 export function Login() {
   const t = useT();
   const [step, setStep] = useState<'email' | 'code'>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(LOGIN_EMAIL);
   const [code, setCode] = useState('');
+  // 登录后：在 /login 打开的去看板；从别的页面被拦下来的，留在原页面（F11）
+  const submit = () => { loginUser(email.trim()); if (location.pathname === '/login') navigate('/app'); };
   return (
     <div>
       <Banner />
@@ -151,7 +156,7 @@ export function Login() {
             <div className="mut" style={{ marginBottom: 10 }}>{t('login.sent')}</div>
             <label className="lbl" htmlFor="l-code">{t('login.code')}</label>
             <input id="l-code" className="field" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
-            <button className="btn block" disabled={code.length !== 6} onClick={() => navigate('/app')}>{t('login.submit')}</button>
+            <button className="btn block" disabled={code.length !== 6} onClick={submit}>{t('login.submit')}</button>
           </>}
           <div className="mut" style={{ marginTop: 14 }}>{t('login.noInvite')} <Link to="/#apply">{t('login.apply')}</Link></div>
         </div>
@@ -184,6 +189,40 @@ export function Unsubscribe() {
             ? <button className="btn2" onClick={() => setDone(false)}>{t('unsub.undo')}</button>
             : <button className="btn block" onClick={() => setDone(true)}>{t('unsub.button')}</button>}
           <div className="mut" style={{ marginTop: 14 }}>{t('unsub.other')} <Link to="/app/settings">{t('unsub.manage')}</Link></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 后台登录（F11、AC-G6）：和客户一样用邮箱验证码，但只认管理员邮箱。原型里管理员邮箱是 admin@tradingjournal.example，验证码输入任意 6 位数字。 */
+export function AdminLogin() {
+  const t = useT();
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [email, setEmail] = useState(ADMIN_EMAIL);
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const submit = () => {
+    if (!loginAdmin(email)) { setErr(t('adminLogin.denied')); setStep('email'); setCode(''); return; }
+    if (location.pathname === '/admin/login') navigate('/admin');
+  };
+  return (
+    <div>
+      <Banner />
+      <div className="page" style={{ maxWidth: 420 }}>
+        <div className="top"><span className="logo">{t('app.name')} · {t('admin.title')}</span><span className="row" style={{ gap: 8 }}><Prefs /></span></div>
+        <div className="card">
+          <div className="h">{t('adminLogin.title')}</div>
+          <label className="lbl" htmlFor="a-email">{t('login.email')}</label>
+          <input id="a-email" className="field" type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(null); }} disabled={step === 'code'} />
+          {err && <div className="err">{err}</div>}
+          {step === 'email' ? <button className="btn block" disabled={!email.includes('@')} onClick={() => setStep('code')}>{t('login.send')}</button> : <>
+            <div className="mut" style={{ marginBottom: 10 }}>{t('login.sent')}</div>
+            <label className="lbl" htmlFor="a-code">{t('login.code')}</label>
+            <input id="a-code" className="field" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+            <button className="btn block" disabled={code.length !== 6} onClick={submit}>{t('login.submit')}</button>
+          </>}
+          <div className="note" style={{ marginTop: 14 }}>{t('adminLogin.hint')}</div>
         </div>
       </div>
     </div>
