@@ -1,7 +1,8 @@
 // 登录后的页面框架：电脑是顶部导航，手机是底部标签栏（C64）。顶部始终显示原型标识。
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { Link, useApp, useIsMobile, useLocation, useT, type ThemePref } from '../lib';
+import { Link, navigate, useApp, useIsMobile, useLocation, useT, type ThemePref } from '../lib';
 import { accountList } from '../mock/api';
+import { logoutUser, useSession } from '../mock/session';
 
 const TABS = [
   ['/app', 'nav.dashboard'], ['/app/trades', 'nav.trades'], ['/app/import', 'nav.import'], ['/app/prop', 'nav.prop'], ['/app/settings', 'nav.settings'],
@@ -28,6 +29,13 @@ export function AccountPicker() {
       {accountList().map((a) => <option key={a.id} value={a.id}>{a.name} · {a.platform}</option>)}
     </select>
   );
+}
+
+/** 退出登录（F11）。电脑在顶部，手机在设置页底部。 */
+export function LogoutButton({ block = false }: { block?: boolean }) {
+  const t = useT();
+  const { user } = useSession();
+  return <button className={block ? 'btn2 block' : 'pill'} title={user ?? ''} onClick={() => { logoutUser(); navigate('/login'); }}>{t('nav.logout')}</button>;
 }
 
 export function Prefs() {
@@ -67,7 +75,7 @@ export function Shell({ children, wide = true }: { children: ReactNode; wide?: b
             <Link to="/app" className="logo">{t('app.name')}</Link>
             <nav className="nav">{TABS.map(([to, k]) => <Link key={to} to={to} className={isOn(to) ? 'on' : ''}>{t(k)}</Link>)}</nav>
           </div>
-          <div className="row" style={{ gap: 8 }}><AccountPicker /><Prefs /><Link to="/admin" className="pill">{t('nav.admin')}</Link></div>
+          <div className="row" style={{ gap: 8 }}><AccountPicker /><Prefs /><LogoutButton /></div>
         </div>
         {wide ? children : <div style={{ maxWidth: 960 }}>{children}</div>}
         <div className="note" style={{ textAlign: 'center', marginTop: 20 }}>{t('common.disclaimer')}</div>

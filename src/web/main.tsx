@@ -9,10 +9,18 @@ import { Import } from './pages/Import';
 import { Prop } from './pages/Prop';
 import { Settings } from './pages/Settings';
 import { Admin } from './pages/Admin';
-import { Calculator, Landing, Login, Unsubscribe } from './pages/Public';
+import { AdminLogin, Calculator, Landing, Login, Unsubscribe } from './pages/Public';
+import { Pay } from './pages/Pay';
+import { useSession } from './mock/session';
 
+// v1.3 草稿：客户端（/app、/pay）要先登录，后台（/admin）要用管理员邮箱登录（F11）。没登录时在原地址显示登录页，登录后直接显示原页面。
 function Router() {
   const path = useLocation().split('?')[0]?.replace(/\/$/, '') || '/';
+  const session = useSession();
+  if (path === '/admin/login') return <AdminLogin />;
+  if (path.startsWith('/admin')) return session.admin ? <Admin path={path} /> : <AdminLogin />;
+  if ((path.startsWith('/app') || path.startsWith('/pay/')) && !session.user) return <Login />;
+  if (path.startsWith('/pay/')) return <Pay code={path.split('/')[2]!} />;
   switch (path) {
     case '/': return <Landing />;
     case '/calculator': return <Calculator />;
@@ -24,7 +32,6 @@ function Router() {
     case '/app/import': return <Import />;
     case '/app/prop': return <Prop />;
     case '/app/settings': return <Settings />;
-    case '/admin': return <Admin />;
     default: return <Landing />;
   }
 }

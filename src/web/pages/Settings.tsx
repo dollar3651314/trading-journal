@@ -1,15 +1,57 @@
-// 设置：交易账户（平台、服务器时区、币种）、通知订阅（AC-N1）、行为规则参数（AC-B5）、专属收件地址、语言和主题、删除全部数据（AC-A3 二次确认）。
+// 设置：交易账户（平台、服务器时区、币种）、🆕 套餐和付费入口（v1.3 草稿 AC-P3）、通知订阅（AC-N1）、行为规则参数（AC-B5）、专属收件地址、语言和主题、删除全部数据（AC-A3 二次确认）。
 import { Fragment, useState } from 'react';
 import { DEFAULT_PARAMS, type BehaviorParams } from '../../core/behavior';
+import { FEATURES, effectiveStatus, formatUsdt, planOf, type Feature, type Period } from '../../core/billing';
+import { daysBetween } from '../../core/activity';
 import { KINDS, MailPreview, TgPreview, type Kind } from '../components/Alerts';
 import { RULES } from '../components/Behavior';
 import { Toast } from '../components/ui';
-import { Prefs, Shell } from '../components/Shell';
-import { Link, useIsMobile, useT } from '../lib';
+import { LogoutButton, Prefs, Shell } from '../components/Shell';
+import { Link, fmtDate, useApp, useIsMobile, useT } from '../lib';
 import { accountList } from '../mock/api';
-import { INBOUND_ADDRESS, LOGIN_EMAIL, SUBSCRIPTIONS, TG_HANDLE } from '../mock/data';
+import { INBOUND_ADDRESS, LOGIN_EMAIL, SUBSCRIPTIONS, TG_HANDLE, TODAY } from '../mock/data';
+import { actions, currentPrice, me, NOW, useAdmin } from '../mock/admin';
 
 type Subs = Record<Kind, { tg: boolean; mail: boolean }>;
+// 哪些推送内容属于 Pro（第 7.6 节）
+const PRO_KIND: Partial<Record<Kind, Feature>> = { weekly: 'weeklyReview', redline: 'redlineAlert', behavior: 'behaviorAlert', eaDown: 'eaDownAlert' };
+const FEATURE_ROWS: Feature[] = ['accounts', 'import', 'dashboard', 'dailyReport', 'allTemplates', 'redlineAlert', 'behaviorAlert', 'eaDownAlert', 'weeklyReview'];
+export const ProTag = () => <span className="tag pro" style={{ cursor: 'default' }}>Pro</span>;
+
+/** 套餐（AC-P3）：当前套餐和到期日、Free 和 Pro 的区别、申请开通 Pro；有未完成的订单时给出付款链接。 */
+function PlanCard() {
+  const t = useT();
+  const { lang } = useApp();
+  const mobile = useIsMobile();
+  const s = useAdmin();
+  const c = me(s);
+  const plan = planOf(c.proUntil, TODAY);
+  const [period, setPeriod] = useState<Period>('month');
+  const requested = s.requests.find((r) => r.customer === c.id);
+  const open = s.orders.filter((o) => o.customer === c.id && ['pending', 'submitted', 'problem'].includes(effectiveStatus(o, NOW)));
+  const cell = (v: boolean | number) => (typeof v === 'number' ? v : v ? '✓' : '—');
+  return (
+    <div className="card">
+      <div className="row wrap"><div className="h" style={{ margin: 0 }}>{t('plan.title')}</div>
+        <span>{plan === 'pro' ? <><ProTag /> {t(c.proSource === 'trial' ? 'plan.trialUntil' : 'plan.until', { date: c.proUntil!, n: daysBetween(TODAY, c.proUntil!) })}</> : <b>Free</b>}</span></div>
+      {open.length > 0 && <div className="previewbox">
+        {open.map((o) => <div key={o.id} className="row" style={{ padding: '4px 0' }}><span>{o.id} · Pro · {t(`plan.${o.period}`)} · {formatUsdt(o.amount)} · <b>{t(`order.status.${effectiveStatus(o, NOW)}`)}</b></span><span style={{ flex: 'none' }}><Link to={`/pay/${o.code}`} className="btn2">{t('plan.toPay')}</Link></span></div>)}
+      </div>}
+      <table style={{ margin: '10px 0' }}>
+        <thead><tr><th>{t('plan.feature')}</th><th className="r">Free</th><th className="r">Pro</th></tr></thead>
+        <tbody>{FEATURE_ROWS.map((f) => <tr key={f}><td>{t(`plan.f.${f}`)}</td><td className="r">{cell(FEATURES[f].free)}</td><td className="r">{cell(FEATURES[f].pro)}</td></tr>)}
+          <tr><td>{t('plan.price')}</td><td className="r">0</td><td className="r">{(currentPrice(s, 'month') / 100).toFixed(2)} / {t('plan.monthShort')}{mobile ? <br /> : ' · '}{(currentPrice(s, 'year') / 100).toFixed(2)} / {t('plan.yearShort')}</td></tr></tbody>
+      </table>
+      {requested ? <div className="mut">{t('plan.requested', { at: fmtDate(requested.at, lang) })}</div> : (
+        <div className="row wrap" style={{ justifyContent: 'flex-start', gap: 8 }}>
+          <select className="pill" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label={t('admin.link.period')}><option value="month">{t('plan.month')}</option><option value="year">{t('plan.year')}</option></select>
+          <button className="btn" onClick={() => actions.request(c.id, period)}>{t('plan.request')}</button>
+        </div>
+      )}
+      <div className="note" style={{ marginTop: 8 }}>{t('plan.note')}</div>
+    </div>
+  );
+}
 const initialSubs = () => Object.fromEntries(SUBSCRIPTIONS.map((x) => [x.kind, { tg: x.tg, mail: x.mail }])) as Subs;
 
 /** 通知订阅：5 种内容 × Telegram / 邮件，每行可以预览（AC-N1）。电脑是表格，手机每种内容一张小卡片（C64）。 */
@@ -54,7 +96,7 @@ function Notify({ onSaved }: { onSaved: () => void }) {
       {mobile ? (
         <div className="stack">{KINDS.map((k) => (
           <div key={k} style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
-            <div className="row"><b>{t(`notify.kind.${k}`)}</b>{previewBtn(k)}</div>
+            <div className="row"><b>{t(`notify.kind.${k}`)} {PRO_KIND[k] && <ProTag />}</b>{previewBtn(k)}</div>
             <div style={{ margin: '6px 0' }}>{when(k)}</div>
             <div className="row" style={{ justifyContent: 'flex-start', gap: 18 }}>{box(k, 'tg')}{box(k, 'mail')}</div>
             {preview?.kind === k && previewBox}
@@ -65,7 +107,7 @@ function Notify({ onSaved }: { onSaved: () => void }) {
           <thead><tr><th>{t('notify.colKind')}</th><th>{t('notify.colWhen')}</th><th style={{ textAlign: 'center' }}>{t('notify.tg')}</th><th style={{ textAlign: 'center' }}>{t('notify.mail')}</th><th /></tr></thead>
           <tbody>{KINDS.map((k) => (
             <Fragment key={k}>
-              <tr><td><b>{t(`notify.kind.${k}`)}</b></td><td>{when(k)}</td><td style={{ textAlign: 'center' }}>{box(k, 'tg')}</td><td style={{ textAlign: 'center' }}>{box(k, 'mail')}</td><td className="r">{previewBtn(k)}</td></tr>
+              <tr><td><b>{t(`notify.kind.${k}`)}</b> {PRO_KIND[k] && <ProTag />}</td><td>{when(k)}</td><td style={{ textAlign: 'center' }}>{box(k, 'tg')}</td><td style={{ textAlign: 'center' }}>{box(k, 'mail')}</td><td className="r">{previewBtn(k)}</td></tr>
               {preview?.kind === k && <tr><td colSpan={5}>{previewBox}</td></tr>}
             </Fragment>
           ))}</tbody>
@@ -110,6 +152,7 @@ function RuleParams({ onSaved }: { onSaved: (msg: string) => void }) {
 
 export function Settings() {
   const t = useT();
+  const mobile = useIsMobile();
   const [toast, setToast] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [typed, setTyped] = useState('');
@@ -128,6 +171,7 @@ export function Settings() {
           ))}
           <div className="note" style={{ marginTop: 8 }}>{t('settings.serverTzHint')}</div>
         </div>
+        <PlanCard />
         <Notify onSaved={() => setToast(t('common.saved'))} />
         <RuleParams onSaved={setToast} />
         <div className="card">
@@ -138,6 +182,7 @@ export function Settings() {
         <div className="card">
           <div className="h">{t('settings.language')} · {t('common.theme')}</div>
           <div className="row" style={{ justifyContent: 'flex-start', gap: 8 }}><Prefs /></div>
+          {mobile && <div style={{ marginTop: 14 }}><LogoutButton block /></div>}
         </div>
         <div className="card">
           <div className="h dn">{t('settings.delete')}</div>

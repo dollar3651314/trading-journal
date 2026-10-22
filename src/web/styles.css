@@ -18,7 +18,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .banner { background: #E3A008; color: #1A1300; text-align: center; font-size: 12px; padding: 4px 8px; font-weight: 600; }
 /* 预留滚动条的位置：页面长短不同时（有的有滚动条、有的没有），内容不会左右跳 */
-html { scrollbar-gutter: stable; }
+@media (min-width: 768px) { html { scrollbar-gutter: stable; } } /* 手机是浮动滚动条，不需要预留 */
 .page { max-width: 1280px; margin: 0 auto; padding: 20px; }
 .m .page { padding: 16px; padding-bottom: 88px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
@@ -72,6 +72,8 @@ tr.click { cursor: pointer; } tr.click:hover td, tr.sel td { background: var(--c
 label.lbl { display: block; font-size: 12.5px; color: var(--mut); margin-bottom: 4px; }
 .field, input.field, select.field, textarea.field { display: block; width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--bg); margin-bottom: 12px; font-variant-numeric: tabular-nums; color: var(--fg); }
 .field.row { display: flex; align-items: center; gap: 8px; }
+.field.row button { flex: none; white-space: nowrap; }
+.pill { white-space: nowrap; }
 .err { color: var(--dn); font-size: 12.5px; margin: -8px 0 10px; }
 .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 32px 16px; text-align: center; margin-bottom: 12px; }
 .drop.over { border-color: var(--acc); }
@@ -109,3 +111,17 @@ label.lbl { display: block; font-size: 12.5px; color: var(--mut); margin-bottom:
 .tg.mail div { margin-bottom: 2px; }
 .tg.mail hr { border: 0; border-top: 1px solid #DDDDDD; margin: 8px 0; }
 .tg.mail a { color: #1A7BB8; }
+
+/* v1.3 草稿：后台活跃日历、付费页、Pro 标记 */
+/* 网格的子元素默认按内容的最小宽度撑开，宽表格会把整页撑出横向滚动；改成可以收缩，表格自己滚动 */
+.grid > * { min-width: 0; }
+.strip { display: flex; flex-wrap: wrap; gap: 2px; }
+.strip i { display: block; width: 7px; height: 14px; border-radius: 2px; }
+.m .strip i { width: 4px; }
+.qr { width: 160px; height: 160px; background: #FFFFFF; border-radius: 10px; padding: 4px; }
+.qr svg { width: 100%; height: 100%; display: block; }
+.paystate { border-radius: 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); line-height: 1.6; }
+.paystate.pending, .paystate.submitted { border-color: var(--warn); }
+.paystate.confirmed { border-color: var(--up); }
+.paystate.problem { border-color: var(--dn); }
+.tag.pro { background: transparent; border-color: var(--acc); color: var(--acc); font-weight: 700; font-size: 11px; padding: 0 6px; margin: 0 0 0 4px; }
