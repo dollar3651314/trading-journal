@@ -10,7 +10,7 @@ export interface CustomerActivity {
   activated: string | null; // 第一次 EA 连接或导入成功的日期
   activeDays: string[]; // 主动活跃日：打开页面或点推送链接
   dataDays: string[]; // 数据活跃日：EA 推送或导入成功
-  paid: number[]; // 已确认到账的订单金额（USDT 按 0.01 的整数）
+  paid: number[]; // 已确认到账的订单金额（USDT 按 0.01 的整数）；退款记成负数
 }
 
 const DAY = 86400000;
@@ -79,7 +79,7 @@ export function channelQuality(customers: CustomerActivity[], today: string): Ch
       retention: { w1: ret(1), w2: ret(2), w4: ret(4) },
       active7: cs.filter((c) => within(c.activeDays, addDays(today, -6), today)).length,
       activeDaysPerWeek: act.length ? Math.round((days28 / 4 / act.length) * 10) / 10 : null,
-      paidUsers: cs.filter((c) => c.paid.length > 0).length,
+      paidUsers: cs.filter((c) => c.paid.reduce((x, y) => x + y, 0) > 0).length, // 全额退款的不算付费用户
       paidAmount: cs.reduce((a, c) => a + c.paid.reduce((x, y) => x + y, 0), 0),
     };
   });

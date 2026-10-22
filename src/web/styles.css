@@ -125,3 +125,6 @@ label.lbl { display: block; font-size: 12.5px; color: var(--mut); margin-bottom:
 .paystate.confirmed { border-color: var(--up); }
 .paystate.problem { border-color: var(--dn); }
 .tag.pro { background: transparent; border-color: var(--acc); color: var(--acc); font-weight: 700; font-size: 11px; padding: 0 6px; margin: 0 0 0 4px; }
+
+/* 付费入口（P5）：有待付款的订单时显示在页面顶部 */
+.paynotice { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--warn); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; background: var(--card); }

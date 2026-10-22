@@ -1,7 +1,7 @@
 // 客户活跃、渠道质量（AC-G7、G10、G11 的口径）和套餐、订单规则（AC-P1、P5–P7）。
 import { describe, expect, it } from 'vitest';
 import { activeInWeek, addDays, channelQuality, cohorts, statusOf, type CustomerActivity } from '../src/core/activity';
-import { canSubmit, effectiveStatus, extendUntil, formatUsdt, isTxHash, parseUsdt, planOf, type Order } from '../src/core/billing';
+import { canSubmit, effectiveStatus, extendUntil, formatUsdt, isAddress, isTxHash, parseUsdt, planOf, revokedUntil, validRefund, type Order } from '../src/core/billing';
 
 const TODAY = '2026-10-22';
 const C = (over: Partial<CustomerActivity>): CustomerActivity => ({ id: 'c', channel: 'reddit', registered: '2026-09-01', activated: null, activeDays: [], dataDays: [], paid: [], ...over });
@@ -45,6 +45,10 @@ describe('渠道质量（AC-G10）', () => {
     expect(cn!.activeDaysPerWeek).toBe(0.3);
   });
   it('付费人数和金额', () => expect([cn!.paidUsers, cn!.paidAmount]).toEqual([1, 1500]));
+  it('全额退款后不算付费用户，金额扣掉退款', () => {
+    const [x] = channelQuality([C({ paid: [1500, -1500] }), C({ id: 'z', paid: [14400, -4400] })], TODAY);
+    expect([x!.paidUsers, x!.paidAmount]).toEqual([1, 10000]);
+  });
   it('没有激活用户时人均活跃天数是 null（页面显示"—"）', () => expect(rd!.activeDaysPerWeek).toBeNull());
   it('按注册周分组：09-01 是周二，归到 08-31 那一周', () => {
     const rows = cohorts(cs, TODAY);
@@ -64,29 +68,58 @@ describe('套餐和开通（第 7.6、7.7 节）', () => {
   it('Pro 已过期：从今天起算', () => expect(extendUntil('2026-10-01', TODAY, 'year')).toBe('2027-10-22'));
 });
 
-describe('订单和交易哈希（AC-P5、P7）', () => {
+describe('网络、付款地址和交易哈希（AC-P4、P5、P7）', () => {
+  const tron = 'TPrototypeDemoAddressNotReaLPay111';
+  const eth = `0x${'ab'.repeat(20)}`;
   const h = 'a'.repeat(64);
-  const o = (over: Partial<Order>): Order => ({ id: 'o', status: 'pending', expiresAt: '2026-10-25T10:00:00Z', txHash: null, ...over });
-  it('哈希：64 位十六进制才合法', () => {
-    expect(isTxHash(h)).toBe(true);
-    expect(isTxHash(` ${h} `)).toBe(true);
-    expect(isTxHash('a'.repeat(63))).toBe(false);
-    expect(isTxHash(`${'a'.repeat(63)}g`)).toBe(false);
-    expect(isTxHash(`0x${'a'.repeat(62)}`)).toBe(false);
+  const o = (over: Partial<Order>): Order => ({ id: 'o', status: 'pending', expiresAt: '2026-10-25T10:00:00Z', txHash: null, network: 'TRC20', ...over });
+  it('TRC20：地址 T 开头 34 位；哈希 64 位十六进制、不带 0x', () => {
+    expect(isAddress('TRC20', tron)).toBe(true);
+    expect(isAddress('TRC20', eth)).toBe(false);
+    expect(isTxHash('TRC20', h)).toBe(true);
+    expect(isTxHash('TRC20', `0x${h}`)).toBe(false);
+    expect(isTxHash('TRC20', 'a'.repeat(63))).toBe(false);
   });
-  it('待付款的订单过了 72 小时是已过期；已提交哈希的不会过期', () => {
+  it('ERC20、BEP20：地址 0x 加 40 位；哈希 0x 加 64 位，钱包没带 0x 的自动补上', () => {
+    expect(isAddress('ERC20', eth)).toBe(true);
+    expect(isAddress('BEP20', 'ab'.repeat(20))).toBe(true);
+    expect(isAddress('BEP20', tron)).toBe(false);
+    expect(isTxHash('ERC20', `0x${h}`)).toBe(true);
+    expect(isTxHash('BEP20', h)).toBe(true);
+    expect(isTxHash('ERC20', `0x${'g'.repeat(64)}`)).toBe(false);
+  });
+  it('待付款的订单过了 72 小时是已过期；已提交的不会过期', () => {
     expect(effectiveStatus(o({}), '2026-10-25T10:00:01Z')).toBe('expired');
     expect(effectiveStatus(o({ status: 'submitted' }), '2026-11-30T00:00:00Z')).toBe('submitted');
   });
-  it('提交哈希：格式不对、已被别的订单用过（不分大小写）、订单已关闭都拒绝', () => {
+  it('点"我已付款"：付款地址、哈希格式、哈希重复（不分大小写、补 0x 后比较）、订单已关闭', () => {
     const now = '2026-10-23T00:00:00Z';
-    expect(canSubmit(o({}), h, now, [])).toBe('ok');
-    expect(canSubmit(o({}), 'xyz', now, [])).toBe('format');
-    expect(canSubmit(o({}), h, now, [h.toUpperCase()])).toBe('used');
-    expect(canSubmit(o({ status: 'confirmed' }), h, now, [])).toBe('closed');
-    expect(canSubmit(o({}), h, '2026-10-26T00:00:00Z', [])).toBe('closed');
-    expect(canSubmit(o({ status: 'problem' }), h, now, [])).toBe('ok');
+    expect(canSubmit(o({}), tron, h, now, [])).toBe('ok');
+    expect(canSubmit(o({}), eth, h, now, [])).toBe('payer');
+    expect(canSubmit(o({}), tron, 'xyz', now, [])).toBe('format');
+    expect(canSubmit(o({}), tron, h, now, [h.toUpperCase()])).toBe('used');
+    expect(canSubmit(o({ network: 'BEP20' }), eth, h, now, [`0x${h}`])).toBe('used');
+    expect(canSubmit(o({ status: 'confirmed' }), tron, h, now, [])).toBe('closed');
+    expect(canSubmit(o({ status: 'refunded' }), tron, h, now, [])).toBe('closed');
+    expect(canSubmit(o({}), tron, h, '2026-10-26T00:00:00Z', [])).toBe('closed');
+    expect(canSubmit(o({ status: 'problem' }), tron, h, now, [])).toBe('ok');
   });
+});
+
+describe('退款（P10）', () => {
+  it('退款金额大于 0、不超过订单金额', () => {
+    expect(validRefund(1500, 1500)).toBe(true);
+    expect(validRefund(1000, 1500)).toBe(true);
+    expect(validRefund(1501, 1500)).toBe(false);
+    expect(validRefund(0, 1500)).toBe(false);
+    expect(validRefund(null, 1500)).toBe(false);
+  });
+  it('审批通过后今天就回到 Free', () => {
+    expect(planOf(revokedUntil(TODAY), TODAY)).toBe('free');
+  });
+});
+
+describe('价格', () => {
   it('价格的输入和显示', () => {
     expect(parseUsdt('15')).toBe(1500);
     expect(parseUsdt('15.5')).toBe(1550);

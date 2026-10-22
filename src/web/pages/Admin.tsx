@@ -1,20 +1,19 @@
-// 运营后台（只给 Amos，AC-G6）：渠道质量、客户列表和详情、收费（申请、订单、价格和收款设置）、内测和邀请码。
+// 运营后台（只给 Amos，AC-G6）：渠道质量、客户列表和详情（显示客户的全部数据，P9）、收费（申请、订单、退款、价格和收款设置）、内测和邀请码。
 // 需求说明书 v1.3 草稿 CH6、CH7。口径用 src/core/activity.ts、billing.ts；数据是模拟的（mock/admin.ts）。后台以电脑为主，手机上能用（单栏）。
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { channelQuality, cohorts, daysBetween, addDays, statusOf, type Rate, type Status } from '../../core/activity';
-import { effectiveStatus, formatUsdt, parseUsdt, planOf, type OrderStatus, type Period } from '../../core/billing';
+import { NETWORKS, NETWORK_LIST, effectiveStatus, formatUsdt, isAddress, parseUsdt, planOf, validRefund, type Network, type OrderStatus, type Period } from '../../core/billing';
 import { computeMetrics, netPnl } from '../../core/metrics';
 import { Toast, money, pct, sign } from '../components/ui';
 import { Banner, Prefs } from '../components/Shell';
 import { Link, fmtDate, navigate, useApp, useIsMobile, useLocation, useT } from '../lib';
-import { actions, currentPrice, customerById, NOW, useAdmin, type AdminOrder, type Customer } from '../mock/admin';
+import { actions, currentPrice, customerById, isDemoAddress, NOW, useAdmin, type AdminOrder, type Customer } from '../mock/admin';
 import { ACCOUNTS, APPLICATIONS, CHANNEL_STATS, INVITES, TODAY } from '../mock/data';
 import { ADMIN_EMAIL, logoutAdmin } from '../mock/session';
 
 const NAV = [['/admin', 'admin.nav.channels'], ['/admin/customers', 'admin.nav.customers'], ['/admin/billing', 'admin.nav.billing'], ['/admin/beta', 'admin.nav.beta']] as const;
 const r = (x: Rate) => (x.base === 0 ? '—' : `${Math.round((x.hit / x.base) * 100)}%`);
 const rFull = (x: Rate) => (x.base === 0 ? '—' : `${r(x)}（${x.hit}/${x.base}）`);
-const tronscan = (h: string) => `https://tronscan.org/#/transaction/${h}`;
 const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-6)}`;
 const PAGE = 20;
 
@@ -47,7 +46,7 @@ function StatusChip({ s }: { s: Status }) {
 }
 function OrderChip({ s }: { s: OrderStatus }) {
   const t = useT();
-  const color = { pending: 'var(--acc)', submitted: 'var(--warn)', confirmed: 'var(--up)', problem: 'var(--dn)', expired: 'var(--mut)', cancelled: 'var(--mut)' }[s];
+  const color = { pending: 'var(--acc)', submitted: 'var(--warn)', confirmed: 'var(--up)', problem: 'var(--dn)', expired: 'var(--mut)', cancelled: 'var(--mut)', refunded: 'var(--mut)' }[s];
   return <span className="tag" style={{ cursor: 'default', borderColor: color, color }}>{t(`order.status.${s}`)}</span>;
 }
 function PlanText({ c }: { c: Customer }) {
@@ -172,11 +171,12 @@ function Customers() {
 }
 
 /** 生成收费链接（AC-P2）：选周期，金额默认当前价格、可以改；生成后显示链接，"系统已发邮件"（原型）。 */
-function SendLink({ customer, onDone, period: p0 = 'month' }: { customer: string; onDone?: (o: AdminOrder) => void; period?: Period }) {
+function SendLink({ customer, onDone, period: p0 = 'month', network: n0 = 'TRC20' }: { customer: string; onDone?: (o: AdminOrder) => void; period?: Period; network?: Network }) {
   const t = useT();
   const s = useAdmin();
   const [period, setPeriod] = useState<Period>(p0);
   const [amount, setAmount] = useState((currentPrice(s, p0) / 100).toFixed(2));
+  const [network, setNetwork] = useState<Network>(n0);
   const [made, setMade] = useState<AdminOrder | null>(null);
   const cents = parseUsdt(amount);
   const ok = cents !== null && cents > 0;
@@ -185,6 +185,7 @@ function SendLink({ customer, onDone, period: p0 = 'month' }: { customer: string
       <div className="previewbox">
         <div><b>{t('admin.link.made', { id: made.id })}</b></div>
         <div className="field row" style={{ margin: '6px 0' }}><span style={{ wordBreak: 'break-all' }}>{`${location.origin}/pay/${made.code}`}</span><button className="btn2" onClick={() => navigator.clipboard?.writeText(`${location.origin}/pay/${made.code}`).catch(() => {})}>{t('common.copy')}</button></div>
+        <div className="mut">USDT · {made.network} · {made.receiveAddress}</div>
         <div className="mut">{t('admin.link.sent')}</div>
       </div>
     );
@@ -194,9 +195,12 @@ function SendLink({ customer, onDone, period: p0 = 'month' }: { customer: string
       <select className="pill" value={period} onChange={(e) => { const p = e.target.value as Period; setPeriod(p); setAmount((currentPrice(s, p) / 100).toFixed(2)); }} aria-label={t('admin.link.period')}>
         <option value="month">{t('plan.month')}</option><option value="year">{t('plan.year')}</option>
       </select>
+      <select className="pill" value={network} onChange={(e) => setNetwork(e.target.value as Network)} aria-label={t('admin.link.network')}>
+        {NETWORK_LIST.map((n) => <option key={n} value={n}>USDT · {n}</option>)}
+      </select>
       <input className="field" style={{ width: 110, margin: 0 }} value={amount} onChange={(e) => setAmount(e.target.value)} aria-label={t('admin.link.amount')} inputMode="decimal" />
       <span className="mut">USDT</span>
-      <button className="btn" disabled={!ok} onClick={() => { const o = actions.createOrder(customer, period, cents!); setMade(o); onDone?.(o); }}>{t('admin.link.create')}</button>
+      <button className="btn" disabled={!ok} onClick={() => { const o = actions.createOrder(customer, period, cents!, network); setMade(o); onDone?.(o); }}>{t('admin.link.create')}</button>
       {!ok && <span className="err" style={{ margin: 0 }}>{t('admin.price.invalid')}</span>}
       {ok && cents !== currentPrice(s, period) && <span className="mut">{t('admin.link.custom', { price: formatUsdt(currentPrice(s, period)) })}</span>}
     </div>
@@ -218,6 +222,43 @@ function ActivityStrip({ c }: { c: Customer }) {
   return <>{row(new Set(c.activeDays), 'var(--up)', t('admin.act.active'))}{row(new Set(c.dataDays), 'var(--acc)', t('admin.act.data'))}<div className="note">{t('admin.act.note', { from: days[0]!, to: TODAY })}</div></>;
 }
 
+/** 客户的全部数据（A2、P9）：每个交易账户的指标、EA 状态和全部交易（含成本、标签、笔记），每页 20 笔。数字和客户自己看到的一致。 */
+function CustomerData({ c }: { c: Customer }) {
+  const t = useT();
+  const { lang } = useApp();
+  const accs = ACCOUNTS.filter((a) => c.linkedAccounts.includes(a.id));
+  const [accId, setAccId] = useState(accs[0]?.id ?? '');
+  const [page, setPage] = useState(0);
+  const acc = accs.find((a) => a.id === accId);
+  const m = acc && acc.trades.length ? computeMetrics(acc.trades) : null;
+  const rows = acc ? [...acc.trades].sort((a, b) => b.closeTime.localeCompare(a.closeTime)) : [];
+  const pageRows = rows.slice(page * PAGE, page * PAGE + PAGE);
+  return (
+    <div className="card">
+      <div className="row wrap"><div className="h" style={{ margin: 0 }}>{t('admin.data.title')}</div><span className="mut">{t('admin.col.sources')}：{c.sources.map((x) => t(`admin.src.${x}`)).join(' · ') || '—'} · {t('admin.col.accounts')} {c.accounts}</span></div>
+      {accs.length === 0 ? <div className="mut" style={{ marginTop: 10 }}>{t('admin.data.none')}</div> : <>
+        <div style={{ margin: '10px 0' }}>{accs.map((a) => <button key={a.id} className={`tag ${a.id === accId ? 'on' : ''}`} onClick={() => { setAccId(a.id); setPage(0); }}>{a.name} · {a.platform}</button>)}</div>
+        {acc && <div className="mut" style={{ marginBottom: 8 }}>{acc.platform}{acc.accountNo !== '—' ? ` #${acc.accountNo}` : ''} · {acc.serverTz} · EA {t(`admin.ea.${acc.ea.status}`)}{acc.lastImport ? ` · ${t('dash.lastImport', { time: fmtDate(acc.lastImport, lang) })}` : ''}</div>}
+        {m ? <>
+          <div className="grid adapt2" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+            <div><div className="mut">{t('kpi.net')}</div><b className={sign(m.net)}>{money(m.net, true)}</b></div>
+            <div><div className="mut">{t('kpi.winRate')}</div><b>{pct(m.winRate)}</b></div>
+            <div><div className="mut">{t('kpi.maxDd')}</div><b className="dn">{money(m.maxDrawdown)}</b></div>
+            <div><div className="mut">{t('admin.data.trades')}</div><b>{m.count}</b></div>
+          </div>
+          <div className="scroll-x"><table><thead><tr><th>{t('col.closeTime')}</th><th>{t('col.symbol')}</th><th>{t('col.side')}</th><th className="r">{t('col.lots')}</th><th className="r">{t('col.gross')}</th><th className="r">{t('col.commission')}</th><th className="r">{t('col.swap')}</th><th className="r">{t('col.net')}</th><th>{t('col.tags')}</th></tr></thead>
+            <tbody>{pageRows.map((x) => <tr key={x.ticket}><td>{fmtDate(x.closeTime, lang)}</td><td>{x.symbol}</td><td>{t(`side.${x.side}`)}</td><td className="r">{x.lots.toFixed(2)}</td><td className="r">{money(x.grossProfit, true)}</td><td className="r">{money(x.commission)}</td><td className="r">{money(x.swap)}</td><td className={`r ${sign(netPnl(x))}`}>{money(netPnl(x), true)}</td><td>{(x.tags ?? []).map((g) => t(`tag.${g}`)).join(' · ')}{x.note ? ` · ${x.note}` : ''}</td></tr>)}</tbody></table></div>
+          {rows.length > PAGE && <div className="row" style={{ marginTop: 10 }}>
+            <span className="mut">{t('common.pageInfo', { from: page * PAGE + 1, to: Math.min(rows.length, page * PAGE + PAGE), total: rows.length })}</span>
+            <span className="row" style={{ gap: 8 }}><button className="btn2" disabled={page === 0} onClick={() => setPage(page - 1)}>{t('common.prev')}</button><button className="btn2" disabled={(page + 1) * PAGE >= rows.length} onClick={() => setPage(page + 1)}>{t('common.next')}</button></span>
+          </div>}
+          <div className="note" style={{ marginTop: 6 }}>{t('admin.data.same')}</div>
+        </> : <div className="mut">{t('empty.title')}</div>}
+      </>}
+    </div>
+  );
+}
+
 function CustomerDetail({ id }: { id: string }) {
   const t = useT();
   const { lang } = useApp();
@@ -225,12 +266,8 @@ function CustomerDetail({ id }: { id: string }) {
   const c = customerById(s, id);
   const [toast, setToast] = useState<string | null>(null);
   const [gift, setGift] = useState('14');
-  useEffect(() => { if (c) actions.viewed(c.id); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return <AdminShell><div className="card state">{t('admin.notFound')}</div></AdminShell>;
-  const acc = ACCOUNTS.find((a) => a.id === c.linkedAccount);
-  const m = acc && acc.trades.length ? computeMetrics(acc.trades) : null;
   const orders = s.orders.filter((o) => o.customer === c.id);
-  const views = s.views.filter((v) => v.customer === c.id);
   const st = statusOf(c, TODAY);
   return (
     <AdminShell>
@@ -262,25 +299,7 @@ function CustomerDetail({ id }: { id: string }) {
           </div>
         </div>
         <div className="stack">
-          <div className="card">
-            <div className="row"><div className="h" style={{ margin: 0 }}>{t('admin.data.title')}</div><span className="mut">{t('admin.col.sources')}：{c.sources.map((x) => t(`admin.src.${x}`)).join(' · ') || '—'} · {t('admin.col.accounts')} {c.accounts}</span></div>
-            {m && acc ? <>
-              <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, margin: '12px 0' }}>
-                <div><div className="mut">{t('kpi.net')}</div><b className={sign(m.net)}>{money(m.net, true)}</b></div>
-                <div><div className="mut">{t('kpi.winRate')}</div><b>{pct(m.winRate)}</b></div>
-                <div><div className="mut">{t('admin.data.trades')}</div><b>{m.count}</b></div>
-              </div>
-              <div className="mut" style={{ marginBottom: 6 }}>{acc.name} · {acc.platform} #{acc.accountNo} · EA {t(`admin.ea.${acc.ea.status}`)}</div>
-              <div className="scroll-x"><table><thead><tr><th>{t('col.closeTime')}</th><th>{t('col.symbol')}</th><th className="r">{t('col.lots')}</th><th className="r">{t('col.net')}</th></tr></thead>
-                <tbody>{[...acc.trades].sort((a, b) => b.closeTime.localeCompare(a.closeTime)).slice(0, 8).map((x) => <tr key={x.ticket}><td>{fmtDate(x.closeTime, lang)}</td><td>{x.symbol}</td><td className="r">{x.lots.toFixed(2)}</td><td className={`r ${sign(netPnl(x))}`}>{money(netPnl(x), true)}</td></tr>)}</tbody></table></div>
-              <div className="note" style={{ marginTop: 6 }}>{t('admin.data.same')}</div>
-            </> : <div className="mut" style={{ marginTop: 10 }}>{t('admin.data.none')}</div>}
-          </div>
-          <div className="card">
-            <div className="h">{t('admin.views.title')}</div>
-            {views.slice(0, 5).map((v, i) => <div key={i} className="mut">{fmtDate(v.at, lang)} · {v.by}</div>)}
-            <div className="note" style={{ marginTop: 6 }}>{t('admin.views.note')}</div>
-          </div>
+          <CustomerData c={c} />
         </div>
       </div>
       <Toast text={toast} onDone={() => setToast(null)} />
@@ -288,7 +307,7 @@ function CustomerDetail({ id }: { id: string }) {
   );
 }
 
-/** 订单表（AC-P6）：客户已提交哈希的订单可以确认到账或标记有问题（必须写原因）。 */
+/** 订单表（AC-P6）：客户点过"我已付款"的订单显示付款地址和交易哈希（P3），可以确认到账或标记有问题（必须写原因）。 */
 function OrderTable({ orders, showCustomer = true }: { orders: AdminOrder[]; showCustomer?: boolean }) {
   const t = useT();
   const { lang } = useApp();
@@ -297,7 +316,7 @@ function OrderTable({ orders, showCustomer = true }: { orders: AdminOrder[]; sho
   const [reason, setReason] = useState('');
   return (
     <table>
-      <thead><tr><th>{t('admin.o.id')}</th>{showCustomer && <th>{t('admin.email')}</th>}<th>{t('admin.o.plan')}</th><th className="r">{t('admin.o.amount')}</th><th>{t('admin.o.status')}</th><th>{t('admin.o.hash')}</th><th>{t('admin.o.created')}</th><th /></tr></thead>
+      <thead><tr><th>{t('admin.o.id')}</th>{showCustomer && <th>{t('admin.email')}</th>}<th>{t('admin.o.plan')}</th><th className="r">{t('admin.o.amount')}</th><th>{t('admin.o.status')}</th><th>{t('admin.o.network')}</th><th>{t('admin.o.payer')}</th><th>{t('admin.o.hash')}</th><th>{t('admin.o.created')}</th><th /></tr></thead>
       <tbody>{orders.map((o) => {
         const st = effectiveStatus(o, NOW);
         return (
@@ -306,8 +325,10 @@ function OrderTable({ orders, showCustomer = true }: { orders: AdminOrder[]; sho
             {showCustomer && <td><Link to={`/admin/customers/${o.customer}`}>{customerById(s, o.customer)?.email}</Link></td>}
             <td>Pro · {t(`plan.${o.period}`)}</td>
             <td className="r">{formatUsdt(o.amount)}</td>
-            <td><OrderChip s={st} />{o.reason && <div className="mut" style={{ fontSize: 11.5, maxWidth: 180 }}>{o.reason}</div>}</td>
-            <td>{o.txHash ? <a href={tronscan(o.txHash)} target="_blank" rel="noreferrer" title={o.txHash}>{short(o.txHash)} ↗</a> : '—'}</td>
+            <td><OrderChip s={st} />{o.reason && <div className="mut" style={{ fontSize: 11.5, maxWidth: 180 }}>{o.reason}</div>}{o.refund && <div className="mut" style={{ fontSize: 11.5 }}>{t(`refund.status.${o.refund.status}`)}{o.refund.amount ? ` · ${formatUsdt(o.refund.amount)}` : ''}</div>}</td>
+            <td>{o.network}</td>
+            <td>{o.payerAddress ? <a href={NETWORKS[o.network].addr(o.payerAddress)} target="_blank" rel="noreferrer" title={o.payerAddress}>{short(o.payerAddress)} ↗</a> : '—'}</td>
+            <td>{o.txHash ? <a href={NETWORKS[o.network].tx(o.txHash)} target="_blank" rel="noreferrer" title={o.txHash}>{short(o.txHash)} ↗</a> : '—'}</td>
             <td>{fmtDate(o.createdAt, lang)}</td>
             <td className="r" style={{ whiteSpace: 'nowrap' }}>
               {st === 'submitted' && problemFor !== o.id && <><button className="btn" onClick={() => actions.confirm(o.id)}>{t('admin.o.confirm')}</button> <button className="btn2" onClick={() => { setProblemFor(o.id); setReason(''); }}>{t('admin.o.problem')}</button></>}
@@ -324,6 +345,42 @@ function OrderTable({ orders, showCustomer = true }: { orders: AdminOrder[]; sho
   );
 }
 
+/** 退款申请（P10）：Amos 填退款金额（不超过订单金额）后通过，立即取消 Pro；也可以拒绝（写原因）。钱由 Amos 线下退回付款地址。 */
+function RefundCard({ orders, onDone }: { orders: AdminOrder[]; onDone: (msg: string) => void }) {
+  const t = useT();
+  const { lang } = useApp();
+  const s = useAdmin();
+  const [amount, setAmount] = useState<Record<string, string>>({});
+  const [note, setNote] = useState<Record<string, string>>({});
+  return (
+    <div className="card" style={{ marginBottom: 20 }}>
+      <div className="h">{t('admin.refund.title')}</div>
+      {orders.length === 0 && <div className="mut">{t('admin.refund.none')}</div>}
+      {orders.map((o) => {
+        const c = customerById(s, o.customer)!;
+        const v = parseUsdt(amount[o.id] ?? (o.amount / 100).toFixed(2));
+        const ok = validRefund(v, o.amount);
+        return (
+          <div key={o.id} style={{ borderBottom: '1px solid var(--line)', padding: '10px 0' }}>
+            <div><Link to={`/admin/customers/${c.id}`}>{c.email}</Link> · {o.id} · Pro {t(`plan.${o.period}`)} · {t('admin.refund.paid', { amount: formatUsdt(o.amount) })} · <span className="mut">{fmtDate(o.refund!.at, lang)}</span></div>
+            <div className="mut">{t('admin.refund.reason')}：{o.refund!.reason || '—'}</div>
+            <div className="mut">{t('admin.refund.to', { network: o.network })} {o.payerAddress ? <a href={NETWORKS[o.network].addr(o.payerAddress)} target="_blank" rel="noreferrer">{o.payerAddress}</a> : '—'}</div>
+            <div className="row wrap" style={{ justifyContent: 'flex-start', gap: 8, marginTop: 8 }}>
+              <input className="field" style={{ width: 110, margin: 0 }} inputMode="decimal" value={amount[o.id] ?? (o.amount / 100).toFixed(2)} onChange={(e) => setAmount({ ...amount, [o.id]: e.target.value })} aria-label={t('admin.refund.amount')} />
+              <span className="mut">USDT</span>
+              <input className="field" style={{ width: 220, margin: 0 }} placeholder={t('admin.refund.note')} value={note[o.id] ?? ''} onChange={(e) => setNote({ ...note, [o.id]: e.target.value })} aria-label={t('admin.refund.note')} />
+              <button className="btn" disabled={!ok} onClick={() => { actions.approveRefund(o.id, v!, (note[o.id] ?? '').trim()); onDone(t('admin.refund.approved')); }}>{t('admin.refund.approve')}</button>
+              <button className="btn2" disabled={!(note[o.id] ?? '').trim()} onClick={() => { actions.rejectRefund(o.id, note[o.id]!.trim()); onDone(t('admin.refund.rejected')); }}>{t('admin.refund.reject')}</button>
+            </div>
+            {!ok && <div className="err" style={{ margin: '6px 0 0' }}>{t('admin.refund.invalid', { max: formatUsdt(o.amount) })}</div>}
+          </div>
+        );
+      })}
+      <div className="note" style={{ marginTop: 8 }}>{t('admin.refund.help')}</div>
+    </div>
+  );
+}
+
 function Billing() {
   const t = useT();
   const { lang } = useApp();
@@ -331,11 +388,14 @@ function Billing() {
   const [toast, setToast] = useState<string | null>(null);
   const [fs, setFs] = useState<OrderStatus | ''>('');
   const [price, setPrice] = useState({ month: (currentPrice(s, 'month') / 100).toFixed(2), year: (currentPrice(s, 'year') / 100).toFixed(2) });
-  const [cfg, setCfg] = useState({ address: s.settings.address, trialDays: String(s.settings.trialDays) });
+  const [cfg, setCfg] = useState({ addresses: { ...s.settings.addresses }, trialDays: String(s.settings.trialDays) });
+  const [dirty, setDirty] = useState<Network[]>([]);
   const [sendFor, setSendFor] = useState<string | null>(null);
   const orders = s.orders.filter((o) => !fs || effectiveStatus(o, NOW) === fs).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const priceOk = (['month', 'year'] as const).every((p) => (parseUsdt(price[p]) ?? 0) > 0);
-  const addrOk = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(cfg.address.trim());
+  // 收款地址按网络校验格式；原型的示例地址故意不合法（防止误转账），没改过时不提示
+  const addrBad = NETWORK_LIST.filter((n) => !isAddress(n, cfg.addresses[n]) && !(isDemoAddress(cfg.addresses[n]) && !dirty.includes(n)));
+  const refunds = s.orders.filter((o) => o.refund?.status === 'requested');
   const waiting = s.orders.filter((o) => effectiveStatus(o, NOW) === 'submitted').length;
   return (
     <AdminShell>
@@ -347,9 +407,9 @@ function Billing() {
             const c = customerById(s, q.customer)!;
             return (
               <div key={q.customer} style={{ borderBottom: '1px solid var(--line)', padding: '10px 0' }}>
-                <div className="row"><span><Link to={`/admin/customers/${c.id}`}>{c.email}</Link> <span className="mut">· {t('admin.req.wants', { period: t(`plan.${q.period}`) })} · {fmtDate(q.at, lang)}</span></span>
+                <div className="row"><span><Link to={`/admin/customers/${c.id}`}>{c.email}</Link> <span className="mut">· {t('admin.req.wants', { period: t(`plan.${q.period}`), network: q.network })} · {fmtDate(q.at, lang)}</span></span>
                   {sendFor !== c.id && <button className="btn2" onClick={() => setSendFor(c.id)}>{t('admin.link.create')}</button>}</div>
-                {sendFor === c.id && <div style={{ marginTop: 8 }}><SendLink customer={c.id} period={q.period} onDone={() => setToast(t('admin.link.sent'))} /></div>}
+                {sendFor === c.id && <div style={{ marginTop: 8 }}><SendLink customer={c.id} period={q.period} network={q.network} onDone={() => setToast(t('admin.link.sent'))} /></div>}
               </div>
             );
           })}
@@ -375,16 +435,19 @@ function Billing() {
         <div style={{ marginTop: 10 }}><OrderTable orders={orders} /></div>
         <div className="note" style={{ marginTop: 8 }}>{t('admin.orders.note')}</div>
       </div>
+      <RefundCard orders={refunds} onDone={setToast} />
       <div className="card">
         <div className="h">{t('admin.cfg.title')}</div>
-        <div className="grid adapt" style={{ gridTemplateColumns: '2fr 1fr 1fr', gap: 12 }}>
-          <div><label className="lbl" htmlFor="cfg-addr">{t('admin.cfg.address')}</label><input id="cfg-addr" className="field" value={cfg.address} onChange={(e) => setCfg({ ...cfg, address: e.target.value })} autoComplete="off" spellCheck={false} /></div>
-          <div><label className="lbl">{t('admin.cfg.network')}</label><div className="field">USDT · TRC20</div></div>
-          <div><label className="lbl" htmlFor="cfg-trial">{t('admin.cfg.trial')}</label><input id="cfg-trial" className="field" inputMode="numeric" value={cfg.trialDays} onChange={(e) => setCfg({ ...cfg, trialDays: e.target.value.replace(/\D/g, '') })} /></div>
+        <div className="grid adapt" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {NETWORK_LIST.map((n) => (
+            <div key={n}><label className="lbl" htmlFor={`cfg-${n}`}>{t('admin.cfg.address', { network: n, chain: NETWORKS[n].chain })}</label>
+              <input id={`cfg-${n}`} className="field" value={cfg.addresses[n]} onChange={(e) => { setCfg({ ...cfg, addresses: { ...cfg.addresses, [n]: e.target.value.trim() } }); setDirty(dirty.includes(n) ? dirty : [...dirty, n]); }} autoComplete="off" spellCheck={false} style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12.5 }} /></div>
+          ))}
         </div>
-        {!addrOk && <div className="err">{t('admin.cfg.addrInvalid')}</div>}
+        <div style={{ maxWidth: 260 }}><label className="lbl" htmlFor="cfg-trial">{t('admin.cfg.trial')}</label><input id="cfg-trial" className="field" inputMode="numeric" value={cfg.trialDays} onChange={(e) => setCfg({ ...cfg, trialDays: e.target.value.replace(/\D/g, '') })} /></div>
+        {addrBad.length > 0 && <div className="err">{t('admin.cfg.addrInvalid', { networks: addrBad.join('、') })}</div>}
         <div style={{ color: 'var(--warn)', fontSize: 12.5, marginBottom: 10 }}>⚠ {t('admin.cfg.noKey')}</div>
-        <button className="btn" disabled={!addrOk} onClick={() => { actions.setSettings({ address: cfg.address.trim(), trialDays: Number(cfg.trialDays || 0) }); setToast(t('admin.cfg.saved')); }}>{t('common.save')}</button>
+        <button className="btn" disabled={addrBad.length > 0} onClick={() => { actions.setSettings({ addresses: cfg.addresses, trialDays: Number(cfg.trialDays || 0) }); setToast(t('admin.cfg.saved')); }}>{t('common.save')}</button>
         <div className="note" style={{ marginTop: 8 }}>{t('admin.cfg.note')}</div>
       </div>
       <Toast text={toast} onDone={() => setToast(null)} />

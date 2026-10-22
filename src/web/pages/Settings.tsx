@@ -1,7 +1,7 @@
 // 设置：交易账户（平台、服务器时区、币种）、🆕 套餐和付费入口（v1.3 草稿 AC-P3）、通知订阅（AC-N1）、行为规则参数（AC-B5）、专属收件地址、语言和主题、删除全部数据（AC-A3 二次确认）。
 import { Fragment, useState } from 'react';
 import { DEFAULT_PARAMS, type BehaviorParams } from '../../core/behavior';
-import { FEATURES, effectiveStatus, formatUsdt, planOf, type Feature, type Period } from '../../core/billing';
+import { FEATURES, NETWORK_LIST, effectiveStatus, formatUsdt, planOf, type Feature, type Network, type Period } from '../../core/billing';
 import { daysBetween } from '../../core/activity';
 import { KINDS, MailPreview, TgPreview, type Kind } from '../components/Alerts';
 import { RULES } from '../components/Behavior';
@@ -18,7 +18,7 @@ const PRO_KIND: Partial<Record<Kind, Feature>> = { weekly: 'weeklyReview', redli
 const FEATURE_ROWS: Feature[] = ['accounts', 'import', 'dashboard', 'dailyReport', 'allTemplates', 'redlineAlert', 'behaviorAlert', 'eaDownAlert', 'weeklyReview'];
 export const ProTag = () => <span className="tag pro" style={{ cursor: 'default' }}>Pro</span>;
 
-/** 套餐（AC-P3）：当前套餐和到期日、Free 和 Pro 的区别、申请开通 Pro；有未完成的订单时给出付款链接。 */
+/** 套餐（AC-P3）：当前套餐和到期日、Free 和 Pro 的区别、申请开通 Pro（选网络）；未完成的订单给出付费入口（P5）；已付款的订单可以申请退款（P10）。 */
 function PlanCard() {
   const t = useT();
   const { lang } = useApp();
@@ -27,15 +27,20 @@ function PlanCard() {
   const c = me(s);
   const plan = planOf(c.proUntil, TODAY);
   const [period, setPeriod] = useState<Period>('month');
+  const [network, setNetwork] = useState<Network>('TRC20');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundOpen, setRefundOpen] = useState(false);
   const requested = s.requests.find((r) => r.customer === c.id);
   const open = s.orders.filter((o) => o.customer === c.id && ['pending', 'submitted', 'problem'].includes(effectiveStatus(o, NOW)));
+  // 可以申请退款的：最近一笔已确认到账、Pro 还有效的订单
+  const paid = s.orders.filter((o) => o.customer === c.id && (o.status === 'confirmed' || o.status === 'refunded')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const cell = (v: boolean | number) => (typeof v === 'number' ? v : v ? '✓' : '—');
   return (
     <div className="card">
       <div className="row wrap"><div className="h" style={{ margin: 0 }}>{t('plan.title')}</div>
         <span>{plan === 'pro' ? <><ProTag /> {t(c.proSource === 'trial' ? 'plan.trialUntil' : 'plan.until', { date: c.proUntil!, n: daysBetween(TODAY, c.proUntil!) })}</> : <b>Free</b>}</span></div>
       {open.length > 0 && <div className="previewbox">
-        {open.map((o) => <div key={o.id} className="row" style={{ padding: '4px 0' }}><span>{o.id} · Pro · {t(`plan.${o.period}`)} · {formatUsdt(o.amount)} · <b>{t(`order.status.${effectiveStatus(o, NOW)}`)}</b></span><span style={{ flex: 'none' }}><Link to={`/pay/${o.code}`} className="btn2">{t('plan.toPay')}</Link></span></div>)}
+        {open.map((o) => { const st = effectiveStatus(o, NOW); return <div key={o.id} className="row" style={{ padding: '4px 0' }}><span>{o.id} · Pro · {t(`plan.${o.period}`)} · {formatUsdt(o.amount)} · {o.network} · <b>{t(`order.status.${st}`)}</b></span><span style={{ flex: 'none' }}><Link to={`/pay/${o.code}`} className={st === 'submitted' ? 'btn2' : 'btn'}>{t(st === 'submitted' ? 'plan.toView' : 'plan.toPay')}</Link></span></div>; })}
       </div>}
       <table style={{ margin: '10px 0' }}>
         <thead><tr><th>{t('plan.feature')}</th><th className="r">Free</th><th className="r">Pro</th></tr></thead>
@@ -45,9 +50,22 @@ function PlanCard() {
       {requested ? <div className="mut">{t('plan.requested', { at: fmtDate(requested.at, lang) })}</div> : (
         <div className="row wrap" style={{ justifyContent: 'flex-start', gap: 8 }}>
           <select className="pill" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label={t('admin.link.period')}><option value="month">{t('plan.month')}</option><option value="year">{t('plan.year')}</option></select>
-          <button className="btn" onClick={() => actions.request(c.id, period)}>{t('plan.request')}</button>
+          <select className="pill" value={network} onChange={(e) => setNetwork(e.target.value as Network)} aria-label={t('admin.link.network')}>{NETWORK_LIST.map((n) => <option key={n} value={n}>USDT · {n}</option>)}</select>
+          <button className="btn" onClick={() => actions.request(c.id, period, network)}>{t('plan.request')}</button>
         </div>
       )}
+      {paid && <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
+        <div className="row wrap"><span className="mut">{t('plan.lastPaid', { id: paid.id, amount: formatUsdt(paid.amount), network: paid.network })}</span>
+          {!paid.refund && paid.status === 'confirmed' && !refundOpen && <button className="btn2" onClick={() => setRefundOpen(true)}>{t('plan.refund')}</button>}</div>
+        {paid.refund && <div style={{ marginTop: 6 }}><b>{t(`refund.status.${paid.refund.status}`)}</b>{paid.refund.amount ? ` · ${formatUsdt(paid.refund.amount)}` : ''}{paid.refund.status === 'rejected' && paid.refund.note ? ` · ${paid.refund.note}` : ''}
+          <div className="note">{t(`refund.hint.${paid.refund.status}`)}</div></div>}
+        {refundOpen && !paid.refund && <div style={{ marginTop: 8 }}>
+          <label className="lbl" htmlFor="refund-reason">{t('plan.refundReason')}</label>
+          <textarea id="refund-reason" className="field" rows={2} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} />
+          <div className="row" style={{ justifyContent: 'flex-start', gap: 8 }}><button className="btn" onClick={() => { actions.requestRefund(paid.id, refundReason.trim()); setRefundOpen(false); }}>{t('plan.refundSubmit')}</button><button className="btn2" onClick={() => setRefundOpen(false)}>{t('common.cancel')}</button></div>
+          <div className="note" style={{ marginTop: 6 }}>{t('plan.refundNote')}</div>
+        </div>}
+      </div>}
       <div className="note" style={{ marginTop: 8 }}>{t('plan.note')}</div>
     </div>
   );

@@ -1,12 +1,13 @@
 // 付费页（需求说明书 v1.3 草稿 CH7，AC-P4、P5、P7）：要登录，只有订单的客户本人能打开。
-// 显示金额、USDT-TRC20 收款地址和二维码、剩余有效时间；客户转账后填交易哈希。到没到账由 Amos 在后台核对，这里不查链上（CH8）。
+// 显示金额、这笔订单的网络（TRC20 / ERC20 / BEP20）、收款地址和二维码、剩余有效时间；客户转账后点"我已付款"，填付款地址和交易哈希（P3）。
+// 到没到账由 Amos 在后台核对，这里不查链上（CH8）。
 import { useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { canSubmit, effectiveStatus, formatUsdt } from '../../core/billing';
+import { NETWORKS, canSubmit, effectiveStatus, formatUsdt } from '../../core/billing';
 import { Toast } from '../components/ui';
 import { Shell } from '../components/Shell';
 import { Link, fmtDate, useApp, useT } from '../lib';
-import { actions, customerById, NOW, RECEIVE_DEMO, useAdmin } from '../mock/admin';
+import { actions, customerById, isDemoAddress, NOW, useAdmin } from '../mock/admin';
 import { LOGIN_EMAIL } from '../mock/data';
 
 function Qr({ text }: { text: string }) {
@@ -21,6 +22,7 @@ export function Pay({ code }: { code: string }) {
   const { lang } = useApp();
   const s = useAdmin();
   const [hash, setHash] = useState('');
+  const [payer, setPayer] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const o = s.orders.find((x) => x.code === code);
@@ -33,13 +35,14 @@ export function Pay({ code }: { code: string }) {
   const left = Math.max(0, Math.floor((Date.parse(o.expiresAt) - Date.parse(NOW)) / 3600000));
   const used = s.orders.filter((x) => x.id !== o.id && x.txHash).map((x) => x.txHash!);
   const submit = () => {
-    const res = canSubmit(o, hash, NOW, used);
-    if (res !== 'ok') return setErr(t(`pay.err.${res}`));
+    const res = canSubmit(o, payer, hash, NOW, used);
+    if (res !== 'ok') return setErr(t(`pay.err.${res}`, { network: o.network }));
     setErr(null);
-    actions.submitHash(o.id, hash);
+    actions.submitPayment(o.id, payer, hash);
     setToast(t('pay.submitted'));
   };
-  const address = s.settings.address;
+  const address = o.receiveAddress;
+  const net = NETWORKS[o.network];
   return (
     <Shell wide={false}>
       <div className="stack">
@@ -56,37 +59,44 @@ export function Pay({ code }: { code: string }) {
               {st === 'confirmed' && t('pay.state.confirmed', { until: owner.proUntil ?? '—' })}
               {st === 'problem' && t('pay.state.problem', { reason: o.reason ?? '' })}
               {st === 'expired' && t('pay.state.expired')}
-              {st === 'cancelled' && t('pay.state.cancelled')}</div>
+              {st === 'cancelled' && t('pay.state.cancelled')}
+              {st === 'refunded' && t('pay.state.refunded', { amount: o.refund?.amount ? formatUsdt(o.refund.amount) : '—' })}</div>
           </div>
         </div>
         {(st === 'pending' || st === 'problem') && <>
           <div className="card">
             <div className="h">{t('pay.step1')}</div>
-            {address === RECEIVE_DEMO && <div className="err" style={{ margin: '0 0 10px' }}>⚠ {t('pay.demoAddress')}</div>}
+            {isDemoAddress(address) && <div className="err" style={{ margin: '0 0 10px' }}>⚠ {t('pay.demoAddress')}</div>}
             <div className="grid adapt" style={{ gridTemplateColumns: '160px 1fr', gap: 16, alignItems: 'start' }}>
               <Qr text={address} />
               <div>
                 <label className="lbl">{t('pay.network')}</label>
-                <div className="field"><b>USDT · TRC20（TRON）</b></div>
+                <div className="field"><b>USDT · {o.network}（{net.chain}）</b></div>
                 <label className="lbl">{t('pay.address')}</label>
                 <div className="field row"><span style={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace' }}>{address}</span><button className="btn2" onClick={() => { navigator.clipboard?.writeText(address).catch(() => {}); setToast(t('common.copied')); }}>{t('common.copy')}</button></div>
                 <label className="lbl">{t('pay.amount')}</label>
                 <div className="field row"><b>{(o.amount / 100).toFixed(2)}</b><button className="btn2" onClick={() => { navigator.clipboard?.writeText((o.amount / 100).toFixed(2)).catch(() => {}); setToast(t('common.copied')); }}>{t('common.copy')}</button></div>
               </div>
             </div>
-            <div style={{ color: 'var(--warn)', fontSize: 12.5 }}>⚠ {t('pay.warnNetwork')}</div>
+            <div style={{ color: 'var(--warn)', fontSize: 12.5 }}>⚠ {t('pay.warnNetwork', { network: o.network, chain: net.chain })}</div>
             <div className="note" style={{ marginTop: 6 }}>{t('pay.noKey')}</div>
           </div>
           <div className="card">
             <div className="h">{t('pay.step2')}</div>
+            <label className="lbl" htmlFor="payer">{t('pay.payer', { network: o.network })}</label>
+            <input id="payer" className="field" value={payer} onChange={(e) => setPayer(e.target.value)} placeholder={t(o.network === 'TRC20' ? 'pay.payerPhTron' : 'pay.payerPhEvm')} spellCheck={false} autoComplete="off" style={{ fontFamily: 'ui-monospace, monospace' }} />
             <label className="lbl" htmlFor="tx">{t('pay.hash')}</label>
-            <input id="tx" className="field" value={hash} onChange={(e) => setHash(e.target.value)} placeholder={t('pay.hashPlaceholder')} spellCheck={false} autoComplete="off" style={{ fontFamily: 'ui-monospace, monospace' }} />
+            <input id="tx" className="field" value={hash} onChange={(e) => setHash(e.target.value)} placeholder={t(o.network === 'TRC20' ? 'pay.hashPhTron' : 'pay.hashPhEvm')} spellCheck={false} autoComplete="off" style={{ fontFamily: 'ui-monospace, monospace' }} />
             {err && <div className="err">{err}</div>}
-            <button className="btn block" disabled={!hash.trim()} onClick={submit}>{t('pay.paid')}</button>
+            <button className="btn block" disabled={!hash.trim() || !payer.trim()} onClick={submit}>{t('pay.paid')}</button>
             <div className="note" style={{ marginTop: 8 }}>{t('pay.manual')}</div>
           </div>
         </>}
-        {st === 'submitted' && o.txHash && <div className="card"><div className="mut">{t('pay.hash')}</div><div style={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace' }}>{o.txHash}</div><div className="note" style={{ marginTop: 6 }}>{t('pay.manual')}</div></div>}
+        {(st === 'submitted' || st === 'confirmed' || st === 'refunded') && o.txHash && <div className="card">
+          <div className="mut">{t('pay.payer', { network: o.network })}</div><div style={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', marginBottom: 8 }}>{o.payerAddress}</div>
+          <div className="mut">{t('pay.hash')}</div><div style={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace' }}>{o.txHash}</div>
+          {st === 'submitted' && <div className="note" style={{ marginTop: 6 }}>{t('pay.manual')}</div>}
+        </div>}
         {(st === 'expired' || st === 'cancelled') && <div className="card"><Link to="/app/settings" className="btn">{t('pay.again')}</Link></div>}
         <div className="note" style={{ textAlign: 'center' }}><Link to="/app/settings">{t('pay.toSettings')}</Link></div>
       </div>

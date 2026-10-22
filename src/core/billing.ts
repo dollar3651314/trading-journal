@@ -31,11 +31,23 @@ export function extendUntil(proUntil: string | null, today: string, period: Peri
   return addDays(from, PERIOD_DAYS[period]);
 }
 
-/** 交易哈希：64 位十六进制（TRC20），前后空格去掉（AC-P5）。 */
-export const isTxHash = (s: string) => /^[0-9a-fA-F]{64}$/.test(s.trim());
+/** 收款网络（Amos 2026-10-22：TRC20、ERC20、BNB 链三条都支持）。地址和交易哈希的格式按网络校验，区块浏览器用来给 Amos 核对。 */
+export type Network = 'TRC20' | 'ERC20' | 'BEP20';
+export const NETWORKS: Record<Network, { chain: string; address: RegExp; hash: RegExp; tx: (h: string) => string; addr: (a: string) => string }> = {
+  TRC20: { chain: 'TRON', address: /^T[1-9A-HJ-NP-Za-km-z]{33}$/, hash: /^[0-9a-fA-F]{64}$/, tx: (h) => `https://tronscan.org/#/transaction/${h}`, addr: (a) => `https://tronscan.org/#/address/${a}` },
+  ERC20: { chain: 'Ethereum', address: /^0x[0-9a-fA-F]{40}$/, hash: /^0x[0-9a-fA-F]{64}$/, tx: (h) => `https://etherscan.io/tx/${h}`, addr: (a) => `https://etherscan.io/address/${a}` },
+  BEP20: { chain: 'BNB Smart Chain', address: /^0x[0-9a-fA-F]{40}$/, hash: /^0x[0-9a-fA-F]{64}$/, tx: (h) => `https://bscscan.com/tx/${h}`, addr: (a) => `https://bscscan.com/address/${a}` },
+};
+export const NETWORK_LIST: Network[] = ['TRC20', 'ERC20', 'BEP20'];
 
-export type OrderStatus = 'pending' | 'submitted' | 'confirmed' | 'problem' | 'expired' | 'cancelled';
-export interface Order { id: string; status: OrderStatus; expiresAt: string; txHash: string | null }
+/** 以太坊和 BNB 链的哈希、地址，钱包有时不带 0x：统一补上；TRON 的哈希不带 0x。 */
+const norm = (n: Network, s: string) => { const v = s.trim(); return n !== 'TRC20' && /^[0-9a-fA-F]+$/.test(v) ? `0x${v}` : v; };
+export const isTxHash = (n: Network, s: string) => NETWORKS[n].hash.test(norm(n, s));
+export const isAddress = (n: Network, s: string) => NETWORKS[n].address.test(norm(n, s));
+export const normalize = norm;
+
+export type OrderStatus = 'pending' | 'submitted' | 'confirmed' | 'problem' | 'expired' | 'cancelled' | 'refunded';
+export interface Order { id: string; status: OrderStatus; expiresAt: string; txHash: string | null; network: Network }
 
 /** 页面上显示的状态：待付款或有问题的订单过了有效期就是已过期；客户已提交哈希的不会过期，等 Amos 处理。 */
 export function effectiveStatus(o: Order, now: string): OrderStatus {
@@ -43,14 +55,22 @@ export function effectiveStatus(o: Order, now: string): OrderStatus {
   return o.status;
 }
 
-/** 客户能不能提交哈希（AC-P7）。usedHashes 是别的订单已经用过的哈希。 */
-export function canSubmit(o: Order, hash: string, now: string, usedHashes: string[]): 'ok' | 'format' | 'used' | 'closed' {
+/** 客户点"我已付款"（AC-P5、P7）：要填付款地址和交易哈希，格式按订单的网络校验。usedHashes 是别的订单已经用过的哈希。 */
+export function canSubmit(o: Order, payer: string, hash: string, now: string, usedHashes: string[]): 'ok' | 'payer' | 'format' | 'used' | 'closed' {
   const st = effectiveStatus(o, now);
   if (st !== 'pending' && st !== 'problem') return 'closed';
-  if (!isTxHash(hash)) return 'format';
-  if (usedHashes.some((h) => h.toLowerCase() === hash.trim().toLowerCase())) return 'used';
+  if (!isAddress(o.network, payer)) return 'payer';
+  if (!isTxHash(o.network, hash)) return 'format';
+  const h = norm(o.network, hash).toLowerCase();
+  if (usedHashes.some((x) => x.toLowerCase() === h)) return 'used';
   return 'ok';
 }
+
+/** 退款金额（P10，Amos 审批时填写）：大于 0，不超过订单金额。 */
+export const validRefund = (amount: number | null, paid: number) => amount !== null && amount > 0 && amount <= paid;
+
+/** 退款审批通过后立即取消 Pro：到期日改成昨天，今天起就是 Free（P10）。 */
+export const revokedUntil = (today: string) => addDays(today, -1);
 
 export const formatUsdt = (cents: number) => `${(cents / 100).toFixed(2)} USDT`;
 
